@@ -1,4 +1,4 @@
-# 新兴际华穿透式监管平台
+# 集团穿透式监管平台
 
 > 一平台三中心 · 集团穿透式监管的工程化落地
 > 对齐方案：`大型央企集团穿透式监管平台（一平台三中心）5年落地实操方案.md`
@@ -301,7 +301,7 @@ curl -X POST http://localhost:7077/api/v1/dispatch/work-orders/wo-001/advance \
 curl -X POST http://localhost:7077/api/v1/ai/query \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query": "查看新兴铸管 2026 年三季度大额资金流向"}'
+  -d '{"query": "查看XXXX 2026 年三季度大额资金流向"}'
 ```
 
 完整端点列表见 [.trae/documents/技术架构.md §4](file:///workspace/.trae/documents/技术架构.md)。
