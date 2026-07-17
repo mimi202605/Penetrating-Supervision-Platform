@@ -44,6 +44,13 @@ import type {
   LineageGraph,
   OrchestrateResult,
   AgentInvokeResponse,
+  AdminUser,
+  AdminRoleDef,
+  PermissionMatrix,
+  AdminAlert,
+  CockpitKpi,
+  MaskingRule,
+  MaskingEvent,
 } from "@/api/types";
 
 export interface RiskFilter {
@@ -339,7 +346,16 @@ export const api = {
   /* ============ 新增：审计日志 ============ */
   listAuditLogs: (params: AuditLogQuery = {}): Promise<AuditLogListResponse> =>
     useMock()
-      ? delay({ list: [] as AuditLog[], total: 0, page: params.page ?? 1, pageSize: params.pageSize ?? 20 })
+      ? delay((() => {
+          const page = params.page ?? 1;
+          const pageSize = params.pageSize ?? 20;
+          let list = [...mock.auditLogs];
+          if (params.userId) list = list.filter((l) => l.userId === params.userId);
+          if (params.action) list = list.filter((l) => l.action === params.action);
+          const total = list.length;
+          const start = (page - 1) * pageSize;
+          return { list: list.slice(start, start + pageSize), total, page, pageSize };
+        })())
       : request<AuditLogListResponse>("/system/audit", {
           query: {
             page: params.page,
@@ -715,4 +731,88 @@ export const api = {
           method: "POST",
           body: { workflow, input },
         }),
+
+  /* ============ 后台：用户管理 ============ */
+  listUsers: (): Promise<AdminUser[]> =>
+    useMock() ? delay(mock.adminUsers) : request<AdminUser[]>("/admin/users"),
+  createUser: (payload: Omit<AdminUser, "id" | "lastLoginAt" | "createdAt">): Promise<AdminUser> =>
+    useMock()
+      ? delay({
+          ...payload,
+          id: `u-${Date.now()}`,
+          lastLoginAt: "—",
+          createdAt: new Date().toISOString().slice(0, 19).replace("T", " "),
+        } as AdminUser)
+      : request<AdminUser>("/admin/users", { method: "POST", body: payload }),
+  updateUser: (id: string, payload: Partial<AdminUser>): Promise<AdminUser> =>
+    useMock()
+      ? delay({ ...mock.adminUsers.find((u) => u.id === id), ...payload } as AdminUser)
+      : request<AdminUser>(`/admin/users/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          body: payload,
+        }),
+  deleteUser: (id: string): Promise<{ success: boolean }> =>
+    useMock() ? delay({ success: true }) : request<{ success: boolean }>(`/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /* ============ 后台：角色与权限 ============ */
+  listRoles: (): Promise<AdminRoleDef[]> =>
+    useMock() ? delay(mock.adminRoles) : request<AdminRoleDef[]>("/admin/roles"),
+  updateRole: (id: string, permissions: PermissionMatrix[]): Promise<AdminRoleDef> =>
+    useMock()
+      ? delay({
+          ...(mock.adminRoles.find((r) => r.id === id) as AdminRoleDef),
+          permissions,
+        })
+      : request<AdminRoleDef>(`/admin/roles/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          body: { permissions },
+        }),
+
+  /* ============ 后台：告警 ============ */
+  listAdminAlerts: (filter: { severity?: string; status?: string } = {}): Promise<AdminAlert[]> =>
+    useMock()
+      ? delay(
+          mock.adminAlerts.filter((a) => {
+            if (filter.severity && a.severity !== filter.severity) return false;
+            if (filter.status && a.status !== filter.status) return false;
+            return true;
+          }),
+        )
+      : request<AdminAlert[]>("/admin/alerts", {
+          query: { severity: filter.severity, status: filter.status },
+        }),
+  confirmAlert: (id: string, confirmBy: string): Promise<AdminAlert> =>
+    useMock()
+      ? delay({ ...(mock.adminAlerts.find((a) => a.id === id) as AdminAlert), status: "confirmed", confirmedBy: confirmBy })
+      : request<AdminAlert>(`/admin/alerts/${encodeURIComponent(id)}/confirm`, {
+          method: "POST",
+          body: { confirmBy },
+        }),
+  silenceAlert: (id: string): Promise<AdminAlert> =>
+    useMock()
+      ? delay({ ...(mock.adminAlerts.find((a) => a.id === id) as AdminAlert), status: "silenced" })
+      : request<AdminAlert>(`/admin/alerts/${encodeURIComponent(id)}/silence`, {
+          method: "POST",
+        }),
+
+  /* ============ 后台：驾驶舱 KPI ============ */
+  getCockpitKpi: (): Promise<CockpitKpi> =>
+    useMock() ? delay(mock.cockpitKpi) : request<CockpitKpi>("/admin/cockpit/kpi"),
+
+  /* ============ 后台：脱敏策略 ============ */
+  listMaskingRules: (): Promise<MaskingRule[]> =>
+    useMock() ? delay(mock.maskingRules) : request<MaskingRule[]>("/admin/masking/rules"),
+  createMaskingRule: (payload: Omit<MaskingRule, "id">): Promise<MaskingRule> =>
+    useMock()
+      ? delay({ ...payload, id: `MR-${Date.now()}` } as MaskingRule)
+      : request<MaskingRule>("/admin/masking/rules", { method: "POST", body: payload }),
+  toggleMaskingRule: (id: string, enabled: boolean): Promise<MaskingRule> =>
+    useMock()
+      ? delay({ ...(mock.maskingRules.find((r) => r.id === id) as MaskingRule), enabled })
+      : request<MaskingRule>(`/admin/masking/rules/${encodeURIComponent(id)}/toggle`, {
+          method: "PUT",
+          body: { enabled },
+        }),
+  listMaskingEvents: (): Promise<MaskingEvent[]> =>
+    useMock() ? delay(mock.maskingEvents) : request<MaskingEvent[]>("/admin/masking/events"),
 };
