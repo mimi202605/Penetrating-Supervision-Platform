@@ -36,7 +36,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm build
+        # 以 mock 模式构建：GitHub Pages 为纯静态托管，无法运行 Node 后端，
+        # 故演示站点回退到内置 mock 数据独立运行（代码库仍保留完整后端联通能力）
+        run: pnpm build:mock
+        env:
+          VITE_USE_MOCK: "true"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

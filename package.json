@@ -11,7 +11,10 @@
     "check": "tsc -b --noEmit",
     "server": "pnpm --dir server run start",
     "server:dev": "pnpm --dir server run dev",
-    "dev:all": "concurrently -n server,web -c blue,green \"pnpm --dir server run dev\" \"pnpm dev\""
+    "dev:all": "concurrently -n server,web -c blue,green \"pnpm --dir server run dev\" \"pnpm dev\"",
+    "build:mock": "VITE_USE_MOCK=true pnpm build",
+    "deploy:gh": "pnpm build:mock && gh-pages -d dist -m \"deploy: 穿透式监管平台前端演示 (mock 模式) [skip ci]\"",
+    "deploy": "pnpm deploy:gh"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -35,6 +38,7 @@
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
+    "gh-pages": "^6.3.0",
     "globals": "^16.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
