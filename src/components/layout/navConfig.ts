@@ -17,6 +17,7 @@ import {
   HardHat,
   FileText,
   Settings,
+  Cog,
 } from "lucide-react";
 
 export interface NavItem {
@@ -72,6 +73,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { path: "/system/audit", label: "审计日志", icon: FileText },
       { path: "/system/settings", label: "系统设置", icon: Settings },
+      { path: "/admin/cockpit", label: "后台管理", icon: Cog },
     ],
   },
 ];

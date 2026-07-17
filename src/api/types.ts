@@ -408,3 +408,6 @@ export interface OrchestrateResult {
 export interface AgentInvokeResponse {
   [key: string]: unknown;
 }
+
+/* ===================== 后台管理中心增补类型（Task 1 先放最小集，Task 2 补齐） ===================== */
+export type AdminRole = "admin" | "核查员" | "处置员";
