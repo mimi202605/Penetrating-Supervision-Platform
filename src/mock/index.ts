@@ -24,6 +24,14 @@ import type {
   CollectionTaskRun,
   AuditPoint,
   DirtyRecord,
+  AdminRole,
+  AdminUser,
+  AdminRoleDef,
+  AdminAlert,
+  CockpitKpi,
+  MaskingRule,
+  MaskingEvent,
+  AuditLog,
 } from "@/api/types";
 
 /* ===================== 监管总览 ===================== */
@@ -778,3 +786,145 @@ export const streamCatalog: StreamCatalog = {
     },
   ],
 };
+
+/* ===================== 后台管理中心 Mock 数据 ===================== */
+
+// 6 个用户（覆盖三角色三部门）
+export const adminUsers: AdminUser[] = [
+  { id: "u-admin-001", username: "admin", name: "系统管理员", role: "admin", department: "信息中心", email: "admin@example.com", phone: "138****0001", status: "active", lastLoginAt: "2026-07-17 08:50:12", createdAt: "2025-01-01 09:00:00" },
+  { id: "u-verifier-002", username: "verifier", name: "王志远", role: "核查员", department: "监督处", email: "wangzy@example.com", phone: "138****0002", status: "active", lastLoginAt: "2026-07-17 08:42:03", createdAt: "2025-03-12 10:20:00" },
+  { id: "u-handler-003", username: "handler", name: "李建国", role: "处置员", department: "处置处", email: "lijg@example.com", phone: "138****0003", status: "active", lastLoginAt: "2026-07-16 18:11:45", createdAt: "2025-04-20 14:00:00" },
+  { id: "u-verifier-004", username: "zhaomin", name: "赵敏", role: "核查员", department: "合规处", email: "zhaomin@example.com", phone: "138****0004", status: "active", lastLoginAt: "2026-07-17 09:01:22", createdAt: "2025-06-08 11:30:00" },
+  { id: "u-handler-005", username: "suntlei", name: "孙磊", role: "处置员", department: "处置处", email: "sunl@example.com", phone: "138****0005", status: "disabled", lastLoginAt: "2026-06-30 17:25:00", createdAt: "2025-08-15 09:45:00" },
+  { id: "u-admin-006", username: "wufang", name: "吴芳", role: "admin", department: "信息中心", email: "wufang@example.com", phone: "138****0006", status: "active", lastLoginAt: "2026-07-17 07:55:30", createdAt: "2025-10-01 08:00:00" },
+];
+
+// 权限模块清单（矩阵列）—— 与后台 4 大模块对齐
+export const ADMIN_PERMISSION_MODULES = [
+  "运营监控",
+  "系统管理",
+  "数据采集运维",
+  "监管配置",
+] as const;
+export const ADMIN_PERMISSION_OPS = ["查看", "新增", "编辑", "删除", "导出"] as const;
+
+// 3 个角色定义 + 权限矩阵
+export const adminRoles: AdminRoleDef[] = [
+  {
+    id: "r-admin",
+    name: "系统管理员",
+    code: "admin",
+    description: "拥有后台全部模块全部操作权限",
+    userCount: 2,
+    permissions: ADMIN_PERMISSION_MODULES.map((module) => ({
+      module,
+      operations: ADMIN_PERMISSION_OPS.map((op) => ({ op, allowed: true })),
+    })),
+  },
+  {
+    id: "r-verifier",
+    name: "核查员",
+    code: "核查员",
+    description: "前台核查工单处置，后台只读监控",
+    userCount: 2,
+    permissions: ADMIN_PERMISSION_MODULES.map((module) => ({
+      module,
+      operations: ADMIN_PERMISSION_OPS.map((op) => ({
+        op,
+        allowed: op === "查看" || op === "导出",
+      })),
+    })),
+  },
+  {
+    id: "r-handler",
+    name: "处置员",
+    code: "处置员",
+    description: "前台风险线索处置，后台仅运营监控只读",
+    userCount: 2,
+    permissions: ADMIN_PERMISSION_MODULES.map((module) => ({
+      module,
+      operations: ADMIN_PERMISSION_OPS.map((op) => ({
+        op,
+        allowed: module === "运营监控" && (op === "查看" || op === "导出"),
+      })),
+    })),
+  },
+];
+
+// 8 条告警（覆盖 red/orange/yellow 三级）
+export const adminAlerts: AdminAlert[] = [
+  { id: "AL-001", title: "采集任务 T-006 连续失败 3 次", severity: "red", status: "active", module: "数据采集运维", detail: "项目档案同步任务失败，错误：ErrorLimitExceeded 脏数据比例超限", triggeredAt: "2026-07-17 08:30:00" },
+  { id: "AL-002", title: "司库 MySQL CDC 延迟 > 30s", severity: "red", status: "active", module: "数据采集运维", detail: "binlog 消费延迟 42s，可能影响资金实时监控", triggeredAt: "2026-07-17 08:15:00" },
+  { id: "AL-003", title: "规则 R-021 命中率异常下降", severity: "orange", status: "active", module: "监管配置", detail: "资金异动规则近 1 小时命中 0 次，平日均值 8 次/小时", triggeredAt: "2026-07-17 07:40:00" },
+  { id: "AL-004", title: "AI 报告生成智能体调用失败率 12%", severity: "orange", status: "active", module: "监管配置", detail: "report-generate 近 1 小时调用 50 次失败 6 次", triggeredAt: "2026-07-17 06:20:00" },
+  { id: "AL-005", title: "核查工单 WO20260715-008 即将超时", severity: "orange", status: "confirmed", module: "运营监控", detail: "剩余处置时长 1.2h，低于 SLA 阈值 2h", triggeredAt: "2026-07-17 05:00:00", confirmedBy: "王志远" },
+  { id: "AL-006", title: "数据源 DS-005 健康度降至 30%", severity: "yellow", status: "active", module: "数据采集运维", detail: "项目档案库连接异常，最近 4 次探测 3 次超时", triggeredAt: "2026-07-17 03:10:00" },
+  { id: "AL-007", title: "审计日志写入延迟 2.3s", severity: "yellow", status: "silenced", module: "系统管理", detail: "审计点 writer_out 延迟略高，已静默观察", triggeredAt: "2026-07-16 22:45:00", confirmedBy: "系统管理员" },
+  { id: "AL-008", title: "用户 sunlei 连续登录失败 5 次", severity: "yellow", status: "confirmed", module: "系统管理", detail: "账号已自动停用，疑似密码遗忘", triggeredAt: "2026-07-16 17:30:00", confirmedBy: "吴芳" },
+];
+
+// 驾驶舱 KPI 聚合（含 7 日趋势）
+export const cockpitKpi: CockpitKpi = {
+  collectionThroughput: { value: 1820, unit: "条/s", delta: "↑ 8.2%", trend: "up" },
+  ruleHits: { value: 326, delta: "↑ 12%", trend: "up" },
+  orderSla: { value: "4.2h", delta: "↓ 0.3h", trend: "down" },
+  aiCalls: { value: 1284, delta: "↑ 5.6%", trend: "up" },
+  moduleHealth: [
+    { name: "数据采集中心", health: 99, tone: "success" },
+    { name: "智慧监督中心", health: 97, tone: "success" },
+    { name: "调度指挥中心", health: 88, tone: "warning" },
+    { name: "AI 智能体", health: 92, tone: "success" },
+    { name: "监管配置", health: 95, tone: "success" },
+    { name: "系统管理", health: 90, tone: "warning" },
+  ],
+  trends: (() => {
+    const arr: CockpitKpi["trends"] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(2026, 6, 17);
+      d.setDate(d.getDate() - i);
+      const label = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      arr.push({
+        date: label,
+        collection: 1600 + Math.round(Math.sin(i / 2) * 200) + (i % 3) * 80,
+        ruleHits: 40 + Math.round(Math.cos(i / 3) * 8) + (i % 4) * 3,
+        orders: 8 + (i % 3) + Math.round(Math.sin(i) * 2),
+        ai: 160 + Math.round(Math.cos(i / 2) * 30) + (i % 5) * 12,
+      });
+    }
+    return arr;
+  })(),
+  alertSummary: [
+    { severity: "red", count: 2 },
+    { severity: "orange", count: 3 },
+    { severity: "yellow", count: 3 },
+  ],
+};
+
+// 脱敏规则
+export const maskingRules: MaskingRule[] = [
+  { id: "MR-001", name: "账户号脱敏", field: "account_no", algorithm: "mask", pattern: "保留前4后4，中间*号", sourceId: "DS-002", sourceName: "司库 MySQL 主库", enabled: true },
+  { id: "MR-002", name: "身份证号哈希", field: "id_card", algorithm: "hash", pattern: "SHA-256 单向哈希", sourceId: "DS-001", sourceName: "浪潮 iGIX 财务模块", enabled: true },
+  { id: "MR-003", name: "手机号掩码", field: "phone", algorithm: "mask", pattern: "保留前3后4，中间*号", enabled: true },
+  { id: "MR-004", name: "金额加密", field: "amount", algorithm: "encrypt", pattern: "AES-256 可逆加密", sourceId: "DS-002", sourceName: "司库 MySQL 主库", enabled: true },
+  { id: "MR-005", name: "对手方名称替换", field: "counterparty", algorithm: "replace", pattern: "替换为统一占位符", sourceId: "DS-001", sourceName: "浪潮 iGIX 财务模块", enabled: false },
+];
+
+// 脱敏事件审计
+export const maskingEvents: MaskingEvent[] = [
+  { id: "ME-001", ruleId: "MR-001", ruleName: "账户号脱敏", sourceId: "DS-002", field: "account_no", appliedAt: "2026-07-17 09:12:00", count: 1820 },
+  { id: "ME-002", ruleId: "MR-002", ruleName: "身份证号哈希", sourceId: "DS-001", field: "id_card", appliedAt: "2026-07-17 09:10:00", count: 42 },
+  { id: "ME-003", ruleId: "MR-004", ruleName: "金额加密", sourceId: "DS-002", field: "amount", appliedAt: "2026-07-17 09:12:00", count: 1820 },
+  { id: "ME-004", ruleId: "MR-003", ruleName: "手机号掩码", sourceId: "DS-001", field: "phone", appliedAt: "2026-07-17 08:45:00", count: 88 },
+];
+
+// 操作审计日志（8 条，覆盖各模块动作）
+export const auditLogs: AuditLog[] = [
+  { id: "LOG-001", userId: "u-admin-001", action: "登录", target: "/admin/cockpit", ip: "10.0.0.12", detail: "管理员登录后台", createdAt: "2026-07-17 08:50:12" },
+  { id: "LOG-002", userId: "u-admin-001", action: "新增", target: "数据源 DS-007", ip: "10.0.0.12", detail: "新建数据源「司库 Oracle 备库」", createdAt: "2026-07-17 09:02:33" },
+  { id: "LOG-003", userId: "u-verifier-002", action: "查询", target: "穿透查询 q=新兴铸管", ip: "10.0.0.25", detail: "穿透查询主体", createdAt: "2026-07-17 09:05:18" },
+  { id: "LOG-004", userId: "u-admin-006", action: "编辑", target: "角色 r-verifier", ip: "10.0.0.18", detail: "调整核查员权限矩阵", createdAt: "2026-07-17 09:10:45" },
+  { id: "LOG-005", userId: "u-handler-003", action: "处置", target: "工单 WO20260716-001", ip: "10.0.0.33", detail: "推进工单至 rectify 节点", createdAt: "2026-07-17 09:15:02" },
+  { id: "LOG-006", userId: "u-admin-001", action: "导出", target: "操作审计日志", ip: "10.0.0.12", detail: "导出 7 日审计日志 CSV", createdAt: "2026-07-17 09:20:11" },
+  { id: "LOG-007", userId: "u-verifier-004", action: "查询", target: "风险预警列表", ip: "10.0.0.41", detail: "筛选 high 级别预警", createdAt: "2026-07-17 09:22:30" },
+  { id: "LOG-008", userId: "u-admin-006", action: "停用", target: "用户 u-handler-005", ip: "10.0.0.18", detail: "停用用户 sunlei（连续登录失败）", createdAt: "2026-07-16 17:31:00" },
+];
