@@ -1,7 +1,6 @@
 # 集团穿透式监管平台
 
 > 一平台三中心 · 集团穿透式监管的工程化落地
-> 对齐方案：`大型央企集团穿透式监管平台（一平台三中心）5年落地实操方案.md`
 > 演示站点：<https://mimi202605.github.io/Penetrating-Supervision-Platform/>
 
 ---
@@ -392,5 +391,3 @@ curl -X POST http://localhost:7077/api/v1/ai/query \
 ## 许可证
 
 详见 [LICENSE](file:///workspace/LICENSE)。
-
-https://www.star-history.com/?repos=mimi202605%2FPenetrating-Supervision-Platform&type=date&legend=top-left
