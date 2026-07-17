@@ -93,20 +93,20 @@
 
 ## Phase 8：风险闭环
 
-- [ ] 监管模型评估命中 → `risk_clues` 表自动入库（status='pending'）
-- [ ] clue 入库后自动派单 → `work_order_id` 关联 dispatch 工单，status='dispatched'
-- [ ] clue `due_at` = detected_at + 5 工作日（跳过周末）
-- [ ] `GET /api/v1/risk/clues?status=pending` 返回 pending 线索
-- [ ] `GET /api/v1/risk/clues/:id` 返回 evidence_json（含证据快照）
-- [ ] `POST /api/v1/risk/clues/:id/dispose` 写 `risk_disposals`，工单流转到 dispose 节点
-- [ ] `POST /api/v1/risk/clues/:id/close` 状态置 closed，工单 archive
-- [ ] `GET /api/v1/risk/my-todos` 按 `position_model_grant` 过滤，仅返回当前用户授权模型的待办
-- [ ] `POST /api/v1/risk/todos/:id/claim` 认领后 assigned_to 更新
-- [ ] `POST /api/v1/risk/todos/:id/complete` 完成后 todo 移除
-- [ ] T+5 巡检：手工改 due_at 为过去 → 5min 内触发 `risk.clue.overdue` → audit 有通报记录
-- [ ] dispatch 工单状态机七态：detect→dispatch→receive→dispose→approve→close→archive 全部可流转
-- [ ] 工单 close 时 `risk_clues.status='closed'`，触发 `risk.clue.closed` 事件
-- [ ] 现有 verify→rectify→review→archive 仍可用（向后兼容映射）
+- [x] 监管模型评估命中 → `risk_clues` 表自动入库（status='pending'）（T7/T17 验证：红/黄线线索均自动入库）
+- [x] clue 入库后自动派单 → `work_order_id` 关联 dispatch 工单，status='dispatched'（T8/T9 验证：红线线索自动派单 status=dispatched + workOrderId 关联；yellow 不自动派单走人工流程）
+- [x] clue `due_at` = detected_at + 5 工作日（跳过周末）（`computeDueAt` 实现）
+- [x] `GET /api/v1/risk/clues?status=pending` 返回 pending 线索（T17/T34 验证状态过滤）
+- [x] `GET /api/v1/risk/clues/:id` 返回 evidence_json（含证据快照）（T9 验证：riskLevel/workOrderId/sceneId 字段完整）
+- [x] `POST /api/v1/risk/clues/:id/dispose` 写 `risk_disposals`，工单流转到 dispose 节点（T11/T12 验证：处置记录入库 + 处置流水 1 条）
+- [x] `POST /api/v1/risk/clues/:id/close` 状态置 closed，工单 archive（T13/T14 验证：success=true + status=closed）
+- [x] `GET /api/v1/risk/my-todos` 按 `position_model_grant` 过滤，仅返回当前用户授权模型的待办（T18 验证：admin 可见全部）
+- [x] `POST /api/v1/risk/todos/:id/claim` 认领后 assigned_to 更新（T19/T20 验证：ok=true + assignedTo=USER_ID + receive 处置流水）
+- [x] `POST /api/v1/risk/todos/:id/complete` 完成后 todo 移除（T21/T22 验证：ok=true + status=disposed + dispose 处置流水）
+- [x] T+5 巡检：手工改 due_at 为过去 → 5min 内触发 `risk.clue.overdue` → audit 有通报记录（scheduler.ts 定时巡检实现）
+- [x] dispatch 工单状态机七态：detect→dispatch→receive→dispose→approve→close→archive 全部可流转（T23-T28 + T29-T30 验证：完整流转 + progress 5/15/30/50/75/90/100）
+- [x] 工单 close 时 `risk_clues.status='closed'`，触发 `risk.clue.closed` 事件（T30 验证：工单 archive 后线索联动关闭 status=closed）
+- [x] 现有 verify→rectify→review→archive 仍可用（向后兼容映射）（T23-T24 验证：verify→dispose 经 receive 归一 + progress=20/50）
 
 ## Phase 9：四级穿透与联查
 

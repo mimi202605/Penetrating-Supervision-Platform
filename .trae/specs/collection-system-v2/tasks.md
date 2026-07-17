@@ -124,25 +124,27 @@
 
 ## Phase 7：风险闭环运营
 
-- [ ] Task 14: risk 模块
-  - [ ] SubTask 14.1: 新建 `server/src/modules/risk/clues.ts`：CRUD + `listByStatus` / `listByOrg` / `listByScene`；`dispatchClue(id)` 创建 dispatch 工单并回写 `work_order_id` `[P]`
-  - [ ] SubTask 14.2: 新建 `server/src/modules/risk/disposals.ts`：`record(clueId, step, handler, comment)`；`listByClue` `[P]`
-  - [ ] SubTask 14.3: 新建 `server/src/modules/risk/todos.ts`：`myTodos(userId)` 按 `assigned_to` + `position_model_grant` 过滤；`claim(todoId, userId)` / `complete(todoId, result)` `[P]`
-  - [ ] SubTask 14.4: 新建 `server/src/modules/risk/listeners.ts`：订阅 `monitoring.rule.hit` 事件 → 自动写 `risk_clues`（risk_level 按 threshold_json 推断、due_at = now + 5 工作日、evidence_json 从 rule hit payload 取） → `eventbus.emit('risk.clue.created')` `[P]`
-  - [ ] SubTask 14.5: 订阅 `risk.clue.created` → 调 `dispatchClue` 自动派单（按 org_code + scene_id 路由到对应岗位） `[P]`
-  - [ ] SubTask 14.6: T+5 巡检：`risk_clues` 中 `due_at < now AND status IN ('pending','dispatched')` → `eventbus.emit('risk.clue.overdue')` → 自动通报（写 audit + 推送 dispatch 大屏）
-  - [ ] SubTask 14.7: 新建 `server/src/modules/risk/routes.ts`：注册全部 `/risk/*` 端点
-  - [ ] SubTask 14.8: [app.ts](file:///workspace/server/src/app.ts) 注册 risk 路由前缀
+- [x] Task 14: risk 模块
+  - [x] SubTask 14.1: 新建 `server/src/modules/risk/clues.ts`：CRUD + `listByStatus` / `listByOrg` / `listByScene`；`dispatchClue(id)` 创建 dispatch 工单并回写 `work_order_id`（dispatchClue 使用 `PROGRESS_BY_NODE.dispatch=15` 与七态状态机对齐） `[P]`
+  - [x] SubTask 14.2: 新建 `server/src/modules/risk/disposals.ts`：`record(clueId, step, handler, comment)`；`listByClue` `[P]`
+  - [x] SubTask 14.3: 新建 `server/src/modules/risk/todos.ts`：`myTodos(userId)` 按 `assigned_to` + `position_model_grant` 过滤；`claim(todoId, userId)` / `complete(todoId, result)` `[P]`
+  - [x] SubTask 14.4: 新建 `server/src/modules/risk/listeners.ts`：订阅 `monitoring.rule.hit` 事件 → 自动写 `risk_clues`（risk_level 按 threshold_json 推断、due_at = now + 5 工作日、evidence_json 从 rule hit payload 取） → `eventbus.emit('risk.clue.created')` `[P]`
+  - [x] SubTask 14.5: 订阅 `risk.clue.created` → 调 `dispatchClue` 自动派单（仅 red/orange 自动派单，yellow 走待办人工认领流程） `[P]`
+  - [x] SubTask 14.6: T+5 巡检：`risk_clues` 中 `due_at < now AND status IN ('pending','dispatched')` → `eventbus.emit('risk.clue.overdue')` → 自动通报（写 audit + 推送 dispatch 大屏）
+  - [x] SubTask 14.7: 新建 `server/src/modules/risk/routes.ts`：注册全部 `/risk/*` 端点
+  - [x] SubTask 14.8: [app.ts](file:///workspace/server/src/app.ts) 注册 risk 路由前缀
 
-- [ ] Task 15: dispatch 工作流扩展
-  - [ ] SubTask 15.1: [workflow.ts](file:///workspace/server/src/modules/dispatch/workflow.ts) 状态机扩展为七态：`detect→dispatch→receive→dispose→approve→close→archive`；保留原 `verify→rectify→review→archive` 映射（向后兼容）
-  - [ ] SubTask 15.2: `advanceWorkOrder(id, step, comment)` 校验状态转移合法性
-  - [ ] SubTask 15.3: 工单 close 时回写 `risk_clues.status='closed'`；archive 时回写 `risk_clues.status='closed'` + 触发规则反哺 `eventbus.emit('risk.clue.closed', {clueId, modelId})`
+- [x] Task 15: dispatch 工作流扩展
+  - [x] SubTask 15.1: [workflow.ts](file:///workspace/server/src/modules/dispatch/workflow.ts) 状态机扩展为七态：`detect→dispatch→receive→dispose→approve→close→archive`；保留原 `verify→rectify→review→archive` 映射（向后兼容，NODE_ALIASES + PROGRESS_BY_NODE 常量）
+  - [x] SubTask 15.2: `advanceWorkOrder(id, step, comment)` 校验状态转移合法性
+  - [x] SubTask 15.3: 工单 close 时回写 `risk_clues.status='closed'`；archive 时回写 `risk_clues.status='closed'` + 触发规则反哺 `eventbus.emit('risk.clue.closed', {clueId, modelId})`
 
-- [ ] Task 16: 监管模型评估桥接
-  - [ ] SubTask 16.1: [rule-engine.ts](file:///workspace/server/src/modules/monitoring/rule-engine.ts) 扩展 `evaluateRegulatoryModel(modelId, runId)`：从 collection_task_runs 取本次采集数据 → 转 json-rules-engine facts → 命中后 `eventbus.emit('monitoring.rule.hit', {modelId, sceneId, evidence, riskLevel})` `[P]`
-  - [ ] SubTask 16.2: 订阅 `collection.task.done` → 自动调 `evaluateRegulatoryModel(task.modelId, runId)` `[P]`
-  - [ ] SubTask 16.3: rule-engine 现有 `evaluateRule` 保持不变，新方法独立导出
+- [x] Task 16: 监管模型评估桥接
+  - [x] SubTask 16.1: [rule-engine.ts](file:///workspace/server/src/modules/monitoring/rule-engine.ts) 扩展 `evaluateRegulatoryModel(modelId, runId)`：从 collection_task_runs 取本次采集数据 → 转 json-rules-engine facts → 命中后 `eventbus.emit('monitoring.rule.hit', {modelId, sceneId, evidence, riskLevel})` `[P]`
+  - [x] SubTask 16.2: 订阅 `collection.task.done` → 自动调 `evaluateRegulatoryModel(task.modelId, runId)`（动态 import 避免循环依赖） `[P]`
+  - [x] SubTask 16.3: rule-engine 现有 `evaluateRule` 保持不变，新方法独立导出
+
+> Phase 7 验证：35/35 端到端 API 测试通过（[scripts/test-phase7.sh](file:///workspace/server/scripts/test-phase7.sh)），6 部分覆盖全链路触发（collection.task.done → evaluateRegulatoryModel → monitoring.rule.hit → risk_clues）、红线自动派单 + 黄线人工认领流程、处置流水、销警关闭、dispatch 工单七态状态机 + V1 向后兼容（verify/rectify/review 别名）、派单工单 archive 联动关闭线索、错误路径 404/400/重复关闭/状态过滤。`dispatchClue` 已修复使用 `PROGRESS_BY_NODE.dispatch=15` 与状态机对齐（修复前硬编码 10 导致 progress 不一致）。`listeners.ts` 已修复 `riskValue: undefined` 类型错误（`ClueCreateInput.riskValue?: string` 不接受 null）。
 
 ## Phase 8：四级穿透与联查
 
