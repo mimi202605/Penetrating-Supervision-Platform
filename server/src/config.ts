@@ -19,11 +19,23 @@ function bool(name: string, fallback: boolean): boolean {
   return raw === "true" || raw === "1" || raw === "yes";
 }
 
+// JWT 签名密钥（生产环境必须通过环境变量覆盖）
+const jwtSecret = str("JWT_SECRET", "dev-secret-change-me");
+// 生产环境必须显式覆盖 JWT_SECRET，禁止使用默认 dev 密钥，否则可被伪造 token 完全绕过鉴权
+if (!config_isDev() && jwtSecret === "dev-secret-change-me") {
+  throw new Error(
+    "JWT_SECRET 未设置或仍为默认值 'dev-secret-change-me'，生产环境(NODE_ENV!=development)必须通过环境变量设置一个强随机密钥。",
+  );
+}
+function config_isDev(): boolean {
+  return str("NODE_ENV", "development") === "development";
+}
+
 export const config = {
   // 服务监听端口
   port: num("PORT", 7077),
   // JWT 签名密钥（生产环境必须通过环境变量覆盖）
-  jwtSecret: str("JWT_SECRET", "dev-secret-change-me"),
+  jwtSecret,
   // SQLite 数据库文件路径
   dbPath: str("DB_PATH", "./data/supervision.db"),
   // AI 适配器（OpenAI 兼容协议），未配置则返回占位响应

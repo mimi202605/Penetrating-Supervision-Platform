@@ -70,16 +70,17 @@ export const registerAIRoutes: FastifyPluginCallback = (app: FastifyInstance, _o
   );
 
   // GET /ai/health：AI 适配器健康检查（configured/provider/endpoint 脱敏/latency）
+  // 探活会真实调用 LLM（计费 + 占连接），须受 ai:invoke 权限约束，避免任意登录用户刷量 DoS
   app.get(
     "/ai/health",
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, requirePermission("ai:invoke")] },
     async (_req: FastifyRequest, reply: FastifyReply) => {
       const health = getAIHealth();
       let latency: number | null = null;
       if (isAIConfigured()) {
-        // 探活：发起一次极简调用测延迟（带 2s 超时）
+        // 探活：发起一次极简调用测延迟（带 5s 超时，避免上游卡死耗尽连接）
         const startedAt = Date.now();
-        const probe = await callLLM("ping");
+        const probe = await callLLM("ping", 5000);
         latency = Date.now() - startedAt;
         if (!probe.ok && probe.reason === "error") {
           logger.debug({ latency, error: probe.error }, "AI 健康探活失败");

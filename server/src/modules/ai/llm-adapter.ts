@@ -53,13 +53,17 @@ export function getAIHealth(): {
 /**
  * 调用 LLM：OpenAI 兼容协议
  * 入参 prompt 必须由调用方先行脱敏（sanitizeForAI），此处不再脱敏
+ * @param timeoutMs fetch 超时（默认 30s），超时则中止请求，避免上游卡死耗尽事件循环/连接
  */
-export async function callLLM(prompt: string): Promise<LLMResult> {
+export async function callLLM(prompt: string, timeoutMs = 30_000): Promise<LLMResult> {
   if (!isAIConfigured()) {
     return { ok: false, reason: "not_configured", placeholder: true };
   }
   const url = config.aiApiBase.replace(/\/$/, "") + "/chat/completions";
   const startedAt = Date.now();
+  // AbortController：到点中止 fetch，防止上游无响应时挂起整个请求处理
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const resp = await fetch(url, {
       method: "POST",
@@ -71,11 +75,13 @@ export async function callLLM(prompt: string): Promise<LLMResult> {
         model: config.aiModel,
         messages: [{ role: "user", content: prompt }],
       }),
+      signal: controller.signal,
     });
     if (!resp.ok) {
+      // 仅取前 200 字节，避免上游返回超大错误体导致 OOM；同时不把上游原始错误体回传客户端
       const text = await resp.text().catch(() => "");
       logger.warn({ status: resp.status, text: text.slice(0, 200) }, "LLM 调用 HTTP 异常");
-      return { ok: false, reason: "error", error: `HTTP ${resp.status}: ${text.slice(0, 200)}` };
+      return { ok: false, reason: "error", error: `HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
@@ -87,7 +93,10 @@ export async function callLLM(prompt: string): Promise<LLMResult> {
     logger.debug({ latency, tokens: usage.completion_tokens }, "LLM 调用完成");
     return { ok: true, content, usage };
   } catch (err) {
-    logger.warn({ err: (err as Error).message }, "LLM 调用异常");
-    return { ok: false, reason: "error", error: (err as Error).message };
+    const aborted = (err as Error).name === "AbortError";
+    logger.warn({ err: (err as Error).message, aborted }, "LLM 调用异常");
+    return { ok: false, reason: "error", error: aborted ? `LLM 调用超时(${timeoutMs}ms)` : (err as Error).message };
+  } finally {
+    clearTimeout(timer);
   }
 }

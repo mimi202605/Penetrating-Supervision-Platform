@@ -4,6 +4,8 @@ import type { FastifyInstance, FastifyPluginCallback, FastifyReply, FastifyReque
 import { queryAll, queryOne, execute } from "../../db/index.js";
 import { camelize } from "../../utils/case.js";
 import { incAiCall } from "../../health.js";
+import { requirePermission } from "../platform/rbac.js";
+import { logger } from "../../utils/logger.js";
 
 /** AI 调用日志行（数据库列） */
 interface AICallLogRow {
@@ -27,13 +29,19 @@ export interface LogAICallPayload {
   token: number;
 }
 
-/** 内部函数：记录 AI 调用到 ai_call_logs */
+/** 内部函数：记录 AI 调用到 ai_call_logs
+ *  日志写入失败不应影响已成功的 LLM 调用结果返回给用户，故吞掉异常仅记录日志 */
 export function logAICall(p: LogAICallPayload): void {
   incAiCall();
-  execute(
-    "INSERT INTO ai_call_logs (user_id, endpoint, input_summary, output_summary, latency_ms, token) VALUES (?, ?, ?, ?, ?, ?)",
-    [p.userId, p.endpoint, p.inputSummary, p.outputSummary, p.latencyMs, p.token],
-  );
+  try {
+    execute(
+      "INSERT INTO ai_call_logs (user_id, endpoint, input_summary, output_summary, latency_ms, token) VALUES (?, ?, ?, ?, ?, ?)",
+      [p.userId, p.endpoint, p.inputSummary, p.outputSummary, p.latencyMs, p.token],
+    );
+  } catch (err) {
+    // 日志写入失败不得丢弃已成功的 LLM 结果，否则会造成"调用付费但用户拿到 500"的静默损失
+    logger.warn({ err: (err as Error).message, endpoint: p.endpoint }, "AI 调用日志写入失败（已忽略，不影响响应）");
+  }
 }
 
 /** 截断摘要到指定长度 */
@@ -44,9 +52,10 @@ function truncate(s: string, max = 500): string {
 /** AI 日志路由插件 */
 export const registerAILogs: FastifyPluginCallback = (app: FastifyInstance, _opts, done) => {
   // GET /ai/logs：查询 ai_call_logs（分页，?userId=&endpoint=&startTime=&endTime=）
+  // 含全量用户的 prompt/响应摘要，属敏感审计数据，按 audit:read 同等口径限制为 admin/leader
   app.get(
     "/ai/logs",
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, requirePermission("audit:read")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const q = request.query as {
         userId?: string;
@@ -75,8 +84,15 @@ export const registerAILogs: FastifyPluginCallback = (app: FastifyInstance, _opt
         params.push(q.endTime);
       }
       const whereClause = where.length ? "WHERE " + where.join(" AND ") : "";
-      const page = Math.max(1, Number(q.page ?? 1));
-      const pageSize = Math.max(1, Math.min(200, Number(q.pageSize ?? 20)));
+      // 解析分页参数：非数字/空串需回退到默认值，避免 Number("abc")=NaN → Math.max(1,NaN)=NaN
+      // 导致 LIMIT/OFFSET 绑定 NaN 触发 better-sqlite3 抛错 → 500
+      const parsedPage = Number(q.page ?? 1);
+      const parsedPageSize = Number(q.pageSize ?? 20);
+      const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1;
+      const pageSize =
+        Number.isFinite(parsedPageSize) && parsedPageSize > 0
+          ? Math.min(200, Math.floor(parsedPageSize))
+          : 20;
       const offset = (page - 1) * pageSize;
 
       const rows = queryAll<AICallLogRow>(

@@ -1,7 +1,7 @@
 // 数据采集中心 - 采集任务 CRUD + 采集任务执行器
 // 对应 collection_tasks 表，API 返回驼峰（CollectionTask 契约）
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import { execute, queryAll, queryOne } from "../../db/index.js";
+import { execute, queryAll, queryOne, transaction } from "../../db/index.js";
 import { camelize } from "../../utils/case.js";
 import { requireRole } from "../platform/rbac.js";
 import { recordAudit } from "../platform/audit.js";
@@ -77,28 +77,34 @@ export function runCollectionTask(taskId: string): void {
 
   if (success) {
     const finishedAt = nowFormatted();
-    execute(
-      "INSERT INTO collection_logs (task_id, status, started_at, finished_at, records_count, error) VALUES (?, ?, ?, ?, ?, ?)",
-      [taskId, "成功", startedAt, finishedAt, records, null],
-    );
-    execute(
-      "UPDATE collection_tasks SET last_status = ?, throughput = ?, last_run = ? WHERE id = ?",
-      ["成功", throughput, finishedAt, taskId],
-    );
+    // 事务包裹 collection_logs INSERT + collection_tasks UPDATE，避免一半提交导致
+    // logs 显示"成功"而 task.last_status 仍停留在旧值的不可恢复不一致
+    transaction(() => {
+      execute(
+        "INSERT INTO collection_logs (task_id, status, started_at, finished_at, records_count, error) VALUES (?, ?, ?, ?, ?, ?)",
+        [taskId, "成功", startedAt, finishedAt, records, null],
+      );
+      execute(
+        "UPDATE collection_tasks SET last_status = ?, throughput = ?, last_run = ? WHERE id = ?",
+        ["成功", throughput, finishedAt, taskId],
+      );
+    });
     logger.info({ taskId, throughput, records }, "采集任务执行成功");
     // 成功后运行数据质量校验
     runQualityCheck(taskId, records);
   } else {
     const finishedAt = nowFormatted();
     const error = "连接超时：源系统响应超时（模拟）";
-    execute(
-      "INSERT INTO collection_logs (task_id, status, started_at, finished_at, records_count, error) VALUES (?, ?, ?, ?, ?, ?)",
-      [taskId, "失败", startedAt, finishedAt, 0, error],
-    );
-    execute(
-      "UPDATE collection_tasks SET last_status = ?, throughput = ?, last_run = ? WHERE id = ?",
-      ["失败", "—", finishedAt, taskId],
-    );
+    transaction(() => {
+      execute(
+        "INSERT INTO collection_logs (task_id, status, started_at, finished_at, records_count, error) VALUES (?, ?, ?, ?, ?, ?)",
+        [taskId, "失败", startedAt, finishedAt, 0, error],
+      );
+      execute(
+        "UPDATE collection_tasks SET last_status = ?, throughput = ?, last_run = ? WHERE id = ?",
+        ["失败", "—", finishedAt, taskId],
+      );
+    });
     incCollectionFailure();
     eventBus.emit("collection.failed", { taskId, error });
     logger.warn({ taskId, error }, "采集任务执行失败");
@@ -213,13 +219,28 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
   );
 
   // DELETE /collection/tasks/:id - 删除（需 admin）
+  // collection_logs / data_quality_issues 对 task_id 有 FK RESTRICT（schema.sql 默认），
+  // 一旦任务有执行历史，直接 DELETE 会触发 SQLITE_CONSTRAINT 抛 500。
+  // 这里在事务中先清理依赖行，再删任务，保证可删除且不留孤儿。
   app.delete(
     "/collection/tasks/:id",
     { preHandler: [requireRole("admin")] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { id } = request.params as { id: string };
-      const r = execute("DELETE FROM collection_tasks WHERE id = ?", [id]);
-      if (r.changes === 0) {
+      let changes = 0;
+      try {
+        transaction(() => {
+          execute("DELETE FROM data_quality_issues WHERE task_id = ?", [id]);
+          execute("DELETE FROM collection_logs WHERE task_id = ?", [id]);
+          const r = execute("DELETE FROM collection_tasks WHERE id = ?", [id]);
+          changes = r.changes;
+        });
+      } catch (err) {
+        logger.warn({ err: (err as Error).message, taskId: id }, "删除采集任务失败");
+        reply.code(500).send({ error: "internal_error", message: "删除采集任务失败", statusCode: 500 });
+        return;
+      }
+      if (changes === 0) {
         reply.code(404).send({ error: "not_found", message: "采集任务不存在", statusCode: 404 });
         return;
       }

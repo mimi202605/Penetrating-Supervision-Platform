@@ -87,10 +87,10 @@ export function refreshPolicies(): void {
 
 /** 策略路由插件 */
 export const registerSanitizerPolicies: FastifyPluginCallback = (app: FastifyInstance, _opts, done) => {
-  // GET /ai/sanitizer/policies：查询全部策略
+  // GET /ai/sanitizer/policies：查询全部策略（暴露脱敏字段名/算法，仅 sanitizer:read 可读）
   app.get(
     "/ai/sanitizer/policies",
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, requirePermission("sanitizer:read")] },
     async (_req: FastifyRequest, reply: FastifyReply) => {
       const rows = queryAll<PolicyRow>(
         "SELECT id, name, field_pattern, algorithm, replace_value, enabled, role_scope, created_at FROM sanitizer_policies ORDER BY id",

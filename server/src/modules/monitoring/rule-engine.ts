@@ -63,14 +63,14 @@ function nowFormatted(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** 生成风险预警 ID：RW + YYYYMMDDHHmm + 3 位随机 */
+/** 生成风险预警 ID：RW + YYYYMMDDHHmmss + 6 位随机
+ *  原实现 RW+YYYYMMDDHHmm+3 位随机，每分钟仅 1000 个 ID，并发评估 ~37 条即 50% PK 冲突，
+ *  INSERT 抛错会让该预警静默丢失（rule-engine 无 try/catch）。扩到秒粒度+6 位随机大幅降低冲突。 */
 function generateWarningId(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
-  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}`;
-  const rand = Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, "0");
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  const rand = Math.floor(Math.random() * 1_000_000).toString().padStart(6, "0");
   return `RW${stamp}${rand}`;
 }
 
@@ -94,6 +94,11 @@ export async function evaluateRule(
   const rule = queryOne<RuleRow>("SELECT id, name, domain, dsl_json, priority, enabled, version FROM rules WHERE id = ?", [ruleId]);
   if (!rule) {
     return { hit: false, ruleId, ruleName: "", level: "", domain: "", events: [] };
+  }
+  // 已禁用的规则不得继续推理/生成预警/触发自动派单，否则管理员"停用"操作无效。
+  // (rules.ts PUT 仅改 enabled=0，evaluateRule 必须在此处显式拦截)
+  if (!rule.enabled) {
+    return { hit: false, ruleId, ruleName: rule.name, level: "", domain: rule.domain ?? "", events: [] };
   }
 
   let dsl: RuleDsl;
