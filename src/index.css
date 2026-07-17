@@ -1,0 +1,391 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================================================
+   设计 Token：暗色（默认）+ 亮色，与设计稿《监管总览》一致
+   ======================================================================== */
+@layer base {
+  :root,
+  .dark {
+    /* 表面 */
+    --color-bg: #0c0d0e;
+    --color-surface: #1d2129;
+    --color-surface-dim: #000b1a;
+    --color-surface-container-low: #1d2129;
+    --color-surface-container: #202833;
+    --color-surface-container-high: #2a3440;
+    --color-surface-container-highest: #41464f;
+    --color-card: #1d2129;
+    --color-sidebar: #1d2129;
+    --color-popover: #2a3440;
+
+    /* 文本 */
+    --color-foreground: #ffffff;
+    --color-on-surface: #ffffff;
+    --color-on-surface-variant: #86909c;
+    --color-muted-foreground: #86909c;
+
+    /* 边框 / 分隔 */
+    --color-border: #333333;
+    --color-border-light: #2a3440;
+    --color-outline: #333333;
+
+    /* 主色 */
+    --color-primary: #1664ff;
+    --color-primary-hover: #0055ff;
+    --color-primary-container: rgba(56, 123, 255, 0.16);
+    --color-primary-soft: rgba(56, 123, 255, 0.14);
+    --color-primary-line: rgba(56, 123, 255, 0.24);
+
+    /* 状态色 */
+    --color-success: #7ccd94;
+    --color-warning: #f0a50f;
+    --color-danger: #ff706d;
+    --color-success-bg: rgba(124, 205, 148, 0.16);
+    --color-warning-bg: rgba(240, 165, 15, 0.16);
+    --color-danger-bg: rgba(255, 112, 109, 0.16);
+    --color-success-line: rgba(124, 205, 148, 0.30);
+    --color-warning-line: rgba(240, 165, 15, 0.30);
+    --color-danger-line: rgba(255, 112, 109, 0.30);
+
+    /* 交互态 */
+    --state-hover: rgba(255, 255, 255, 0.06);
+    --state-active: rgba(255, 255, 255, 0.12);
+
+    /* 表格 */
+    --color-table-header-bg: #202833;
+    --color-table-header-text: rgba(255, 255, 255, 0.78);
+    --color-table-cell-bg: #1d2129;
+    --color-table-row-hover: rgba(255, 255, 255, 0.06);
+    --color-table-row-stripe: #1d2129;
+    --color-table-border: #333333;
+
+    color-scheme: dark;
+  }
+
+  .light {
+    /* 表面 */
+    --color-bg: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-dim: #fcfdfe;
+    --color-surface-container-low: #fcfdfe;
+    --color-surface-container: #f7f9fb;
+    --color-surface-container-high: #f1f4f8;
+    --color-surface-container-highest: #eceded;
+    --color-card: #ffffff;
+    --color-sidebar: #fcfdfe;
+    --color-popover: #f1f4f8;
+
+    /* 文本 */
+    --color-foreground: #0c0d0e;
+    --color-on-surface: #0c0d0e;
+    --color-on-surface-variant: #86909c;
+    --color-muted-foreground: #86909c;
+
+    /* 边框 */
+    --color-border: #dde2e9;
+    --color-border-light: #eaedf1;
+    --color-outline: #dde2e9;
+
+    /* 主色 */
+    --color-primary: #1664ff;
+    --color-primary-hover: #0055ff;
+    --color-primary-container: #f3f7ff;
+    --color-primary-soft: rgba(22, 100, 255, 0.08);
+    --color-primary-line: rgba(22, 100, 255, 0.24);
+
+    /* 状态色 */
+    --color-success: #2a814b;
+    --color-warning: #bd7e00;
+    --color-danger: #d7312a;
+    --color-success-bg: #e2f5eb;
+    --color-warning-bg: #fdf3de;
+    --color-danger-bg: #feeced;
+    --color-success-line: #8dd8b3;
+    --color-warning-line: #f8d080;
+    --color-danger-line: #fa9ea3;
+
+    /* 交互态 */
+    --state-hover: rgba(22, 100, 255, 0.08);
+    --state-active: rgba(22, 100, 255, 0.16);
+
+    /* 表格 */
+    --color-table-header-bg: #f6f8fa;
+    --color-table-header-text: #42464e;
+    --color-table-cell-bg: #ffffff;
+    --color-table-row-hover: #f2f3f5;
+    --color-table-row-stripe: #fafbfc;
+    --color-table-border: #eaedf1;
+
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-foreground);
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-size: 12px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-on-surface-variant);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ========================================================================
+   通用组件类
+   ======================================================================== */
+@layer components {
+  /* 卡片：与设计稿 .card 一致 */
+  .ds-card {
+    @apply rounded-md border;
+    background: var(--color-card);
+    border-color: var(--color-border);
+    box-shadow: var(--tw-shadow);
+    padding: 16px;
+  }
+
+  /* 章节标题 */
+  .ds-section-title {
+    @apply text-h3 font-medium m-0;
+    color: var(--color-foreground);
+  }
+  .ds-section-sub {
+    @apply text-body;
+    color: var(--color-on-surface-variant);
+  }
+
+  /* 状态标签 */
+  .ds-tag {
+    @apply inline-flex items-center gap-1 h-5 px-1.5 rounded-sm text-caption font-medium whitespace-nowrap border;
+  }
+  .ds-tag-success {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border-color: var(--color-success-line);
+  }
+  .ds-tag-warning {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+    border-color: var(--color-warning-line);
+  }
+  .ds-tag-error {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    border-color: var(--color-danger-line);
+  }
+  .ds-tag-info {
+    background: var(--color-primary-container);
+    color: var(--color-primary);
+    border-color: var(--color-primary-line);
+  }
+  .ds-tag-stop {
+    background: var(--color-surface-container);
+    color: var(--color-on-surface-variant);
+    border-color: var(--color-border);
+  }
+
+  /* 状态点 */
+  .ds-dot {
+    @apply inline-block w-1.5 h-1.5 rounded-full flex-shrink-0;
+  }
+
+  /* 行内进度条 */
+  .ds-progress {
+    @apply flex items-center gap-1.5 min-w-[120px];
+  }
+  .ds-progress-track {
+    @apply flex-1 h-1 rounded-full overflow-hidden;
+    background: var(--color-surface-container-high);
+  }
+  .ds-progress-fill {
+    @apply h-full rounded-full;
+    background: var(--color-primary);
+    transition: width 400ms ease-out;
+  }
+  .ds-progress-fill-success {
+    background: var(--color-success);
+  }
+  .ds-progress-fill-warning {
+    background: var(--color-warning);
+  }
+  .ds-progress-fill-danger {
+    background: var(--color-danger);
+  }
+
+  /* 表格 */
+  .ds-table {
+    @apply w-full border-collapse text-lead;
+  }
+  .ds-table th,
+  .ds-table td {
+    @apply px-4 py-3 text-left whitespace-nowrap border-b;
+    border-color: var(--color-table-border);
+  }
+  .ds-table th {
+    background: var(--color-table-header-bg);
+    color: var(--color-table-header-text);
+    font-weight: 500;
+    font-size: 13px;
+  }
+  .ds-table td {
+    background: var(--color-table-cell-bg);
+    color: var(--color-foreground);
+    font-size: 13px;
+  }
+  .ds-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .ds-table tbody tr:hover td {
+    background: var(--color-table-row-hover);
+  }
+  .ds-table .td-mono {
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 12px;
+  }
+  .ds-action-link {
+    @apply cursor-pointer text-body;
+    color: var(--color-primary);
+  }
+  .ds-action-link:hover {
+    opacity: 0.85;
+  }
+
+  /* 表格容器（横向滚动 + 首列粘性） */
+  .ds-table-wrap {
+    @apply overflow-x-auto;
+  }
+  .ds-table-wrap .sticky-col {
+    @apply sticky left-0 z-[1];
+    background: var(--color-table-cell-bg);
+  }
+  .ds-table-wrap tbody tr:hover .sticky-col {
+    background: var(--color-table-row-hover);
+  }
+
+  /* 输入框 */
+  .ds-input {
+    @apply inline-flex items-center gap-2 h-8 px-3 rounded-sm border text-lead;
+    background: var(--color-surface-container);
+    border-color: var(--color-border);
+    color: var(--color-foreground);
+  }
+  .ds-input input {
+    @apply border-none outline-none bg-transparent text-lead w-full;
+    color: var(--color-foreground);
+  }
+  .ds-input input::placeholder {
+    color: var(--color-on-surface-variant);
+  }
+
+  /* 按钮 */
+  .ds-btn {
+    @apply inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-sm text-body font-medium cursor-pointer transition-opacity;
+  }
+  .ds-btn:hover {
+    opacity: 0.85;
+  }
+  .ds-btn-primary {
+    background: var(--color-primary);
+    color: #ffffff;
+  }
+  .ds-btn-secondary {
+    background: var(--color-surface-container);
+    color: var(--color-foreground);
+    border: 1px solid var(--color-border);
+  }
+  .ds-btn-secondary:hover {
+    background: var(--color-surface-container-high);
+  }
+
+  /* 顶部导航图标按钮 */
+  .ds-icon-btn {
+    @apply relative w-8 h-8 flex items-center justify-center rounded-sm cursor-pointer;
+    color: var(--color-on-surface-variant);
+  }
+  .ds-icon-btn:hover {
+    background: var(--state-hover);
+    color: var(--color-foreground);
+  }
+
+  /* 侧栏菜单项 */
+  .ds-menu-item {
+    @apply flex items-center gap-2 h-9 px-3 rounded-sm cursor-pointer transition-colors text-lead;
+    color: var(--color-foreground);
+  }
+  .ds-menu-item:hover {
+    background: var(--state-hover);
+  }
+  .ds-menu-item.active {
+    background: var(--color-primary-container);
+    color: var(--color-primary);
+    position: relative;
+  }
+  .ds-menu-item.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    background: var(--color-primary);
+    border-radius: 0 2px 2px 0;
+  }
+}
+
+/* ========================================================================
+   Recharts 暗色 tooltip 适配
+   ======================================================================== */
+.recharts-default-tooltip {
+  background: rgba(29, 33, 41, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 4px !important;
+  padding: 10px !important;
+}
+.light .recharts-default-tooltip {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid var(--color-border) !important;
+  color: var(--color-foreground) !important;
+}
+.recharts-tooltip-label,
+.recharts-tooltip-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-size: 12px !important;
+}
+.light .recharts-tooltip-label,
+.light .recharts-tooltip-item {
+  color: var(--color-foreground) !important;
+}
