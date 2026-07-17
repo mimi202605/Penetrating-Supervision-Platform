@@ -42,6 +42,12 @@
 - 审计（Ranger 等价）：所有查询/处置操作落审计表，审计日志查询接口。
 - 监控（Prometheus 等价）：`/metrics` 指标暴露、`/health` 健康检查。
 
+### 新增：人工智能能力与数据脱敏（`server/modules/ai/`）
+- **数据脱敏模块**（Apache Ranger 脱敏能力等价）：业务数据进入 AI 处理链路前 MUST 强制脱敏。提供规则化脱敏策略，覆盖身份证 / 银行卡 / 手机号 / 姓名 / 金额 / 账户号 / 统一社会信用代码等敏感字段；支持掩码（`6228****1234`）、哈希、替换为占位符、区间化（金额归入区间）四种脱敏算法；脱敏策略按角色 / 字段 / 数据源配置，脱敏前后留痕审计，支持脱敏回溯。
+- **AI 网关端口**：独立暴露 AI 能力 API（`/api/v1/ai/**`），与业务接口解耦；预留可插拔 LLM 适配器（LangChain 等价），默认对接可配置的 `AI_API_BASE`（OpenAI 兼容协议，便于对接集团微调版 Llama3 / 国产大模型），未配置时返回结构化占位响应，不阻塞主流程。
+- **AI 应用**（阶段 4 规划，本期预留端口 + 脱敏链路 + 最小可用模板）：自然语言穿透查询、合同违规条款审查、风险处置报告自动生成。
+- **数据流约束**：任何业务数据传入 AI 模型前 MUST 先经脱敏管道 `sanitizeForAI(payload, policy)`，原始敏感数据绝不外送 LLM；脱敏事件写审计日志，AI 调用全链路（入参脱敏后 / 出参 / 耗时 / token）记录可追溯。
+
 ### 修改：前端 API 层衔接
 - **BREAKING（仅运行时）**：`src/api/index.ts` 由“直接返回 mock”改为“调用真实后端 `fetch`”，保留 `VITE_USE_MOCK` 环境变量回退 mock，默认走真实后端。
 - `vite.config.ts`：增加 `/api` 代理到后端（默认 `http://localhost:7077`）。
@@ -76,7 +82,9 @@
 | Apache Doris | 智慧监督 | SQLite + 分层视图（ODS/DWD/DWS/ADS） | MySQL 协议兼容语义，分析查询用 SQL 实现 |
 | NebulaGraph | 智慧监督 | `server/modules/monitoring/graph.ts` 内存邻接表 + SQLite | 四级关联、二度/长路径遍历 |
 | Drools | 智慧监督 | `json-rules-engine`（npm，MIT） | 规则 DSL + RETE 风格推理 |
-| LangChain | 智慧监督 | 预留 `server/modules/monitoring/ai.ts` 接口 | 自然语言查询占位（阶段 4） |
+| LangChain | 智慧监督 | `server/modules/ai/llm-adapter.ts` 可插拔适配器 | 对接 `AI_API_BASE`（OpenAI 兼容），未配置返回占位，对接集团微调 Llama3 |
+| Apache Ranger（脱敏） | 技术中台 | `server/modules/ai/sanitizer.ts` 脱敏管道 | 字段级脱敏（掩码/哈希/替换/区间），AI 前置强制脱敏 |
+| AI 网关 | 技术中台 | `/api/v1/ai/**` 独立端口 | 自然语言查询/合同审查/报告生成，脱敏后调用 |
 | Flowable | 调度指挥 | `server/modules/dispatch/workflow.ts` 状态机 | BPMN 等价：核查→整改→复核→归档 |
 | Apache Superset | 调度指挥 | 大屏聚合接口 + 前端 Recharts | 指挥驾驶舱数据后端 |
 | RocketMQ | 调度指挥 | 进程内 EventBus（`events`） | 三中心异步解耦，预留 BullMQ 升级 |
@@ -173,6 +181,35 @@
 - **WHEN** 调用 `GET /api/v1/system/audit?userId=...&action=...`
 - **THEN** 返回审计记录列表（操作人/操作类型/目标/时间/IP/详情）。
 
+### Requirement: 数据脱敏（AI 前置）
+系统 SHALL 提供字段级数据脱敏管道，任何业务数据传入 AI 模型前 MUST 先经 `sanitizeForAI(payload, policy)` 脱敏，原始敏感数据绝不外送 LLM。
+
+#### Scenario: 脱敏策略执行
+- **WHEN** 调用 AI 接口携带含银行卡号 `6228****1234` 全号、身份证、手机号的业务载荷
+- **THEN** 脱敏管道按策略将敏感字段转为掩码/哈希/占位/区间值，仅脱敏后载荷传入 LLM 适配器，脱敏事件写 `audit_logs`（含原字段指纹、脱敏算法、操作人）。
+
+#### Scenario: 脱敏策略配置
+- **WHEN** 调用 `POST /api/v1/ai/sanitizer/policies` 配置「金额字段→区间化、姓名字段→掩码」策略
+- **THEN** 策略落库 `sanitizer_policies` 表，后续 AI 调用按策略执行；`GET /api/v1/ai/sanitizer/policies` 可查询/启停策略。
+
+### Requirement: AI 网关端口
+系统 SHALL 独立暴露 AI 能力 API（`/api/v1/ai/**`），与业务接口解耦，预留可插拔 LLM 适配器；未配置 `AI_API_BASE` 时返回结构化占位响应，不阻塞主流程。
+
+#### Scenario: 自然语言穿透查询（占位）
+- **WHEN** 调用 `POST /api/v1/ai/query` 携带自然语言「查看 XX 公司 2026 年三季度大额资金流向」
+- **THEN** 后端先脱敏 → 调用 LLM 适配器；若 `AI_API_BASE` 未配置，返回结构化占位响应（含解析意图、建议 SQL/图查询模板、提示需配置 AI 端点）；若已配置，转发至 LLM 并返回结果。
+
+#### Scenario: AI 端点健康检查
+- **WHEN** 调用 `GET /api/v1/ai/health`
+- **THEN** 返回 AI 适配器状态（`configured: true/false`、`provider`、`endpoint` 脱敏显示、`latency`），便于运维确认 AI 链路可用性。
+
+### Requirement: AI 调用全链路追溯
+系统 SHALL 记录每次 AI 调用全链路（入参脱敏后摘要 / 出参 / 耗时 / token 消耗 / 调用者），支持追溯审计。
+
+#### Scenario: AI 调用审计
+- **WHEN** 任意 `/api/v1/ai/**` 接口被调用
+- **THEN** 写入 `ai_call_logs` 表（调用者 / 端点 / 脱敏后入参摘要 / 出参摘要 / 耗时ms / token / 时间），`GET /api/v1/ai/logs` 可查询。
+
 ### Requirement: 前后台完整衔接
 系统 SHALL 让前端 `src/api/index.ts` 默认调用真实后端，保留 `VITE_USE_MOCK=true` 回退 mock；Vite 代理 `/api` 至后端。
 
@@ -206,6 +243,8 @@
 ## 非功能与约束
 - **协议合规**：所有引入 npm 包均为 Apache-2.0/MIT 协议，与方案“无商业版权风险”一致。
 - **信创兼容**：Node.js + SQLite + 纯 JS 规则引擎天然跨平台，可在麒麟/统信运行；JDBC/国产 DB 适配在阶段 4 处理（本期预留配置位）。
-- **性能（沙箱量级）**：图谱二度查询 ≤500ms，列表查询 ≤200ms，规则推理 ≤100ms。
+- **AI 可选可插拔**：`AI_API_BASE` 环境变量未配置时，AI 接口返回结构化占位，主流程不受影响；配置后对接 OpenAI 兼容端点（集团微调 Llama3 / 国产大模型）。
+- **数据安全（脱敏强约束）**：AI 链路零原始敏感数据外送，脱敏策略可配置可审计可回溯；脱敏管道为 AI 调用必经前置环节。
+- **性能（沙箱量级）**：图谱二度查询 ≤500ms，列表查询 ≤200ms，规则推理 ≤100ms，脱敏处理 ≤20ms/KB。
 - **可运行性**：`pnpm install` → `pnpm server:dev`（后台）+ `pnpm dev`（前台）一键联调；提供 `pnpm dev:all` 并发启动。
-- **不引入外部进程依赖**：无需 Redis/MySQL/Doris/NebulaGraph 等独立服务，全部进程内/SQLite 承载，保证沙箱零外部依赖可运行。
+- **不引入外部进程依赖**：无需 Redis/MySQL/Doris/NebulaGraph/LLM 服务等独立进程，全部进程内/SQLite 承载，AI 通过可配置 HTTP 端点对接，保证沙箱零外部依赖可运行。

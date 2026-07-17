@@ -6,11 +6,11 @@
 - [ ] Task 1: 后端工程骨架与依赖初始化
   - [ ] SubTask 1.1: 在 `/workspace/server/` 初始化 Node.js + TypeScript + Fastify 工程（`package.json`、`tsconfig.json`、`tsup`/`tsx` 开发运行）`[P]`
   - [ ] SubTask 1.2: 安装开源依赖（`fastify`、`@fastify/jwt`、`@fastify/cors`、`@fastify/rate-limit`、`better-sqlite3`、`json-rules-engine`、`node-cron`、`pino`、`zod`、`@types/*`）`[P]`
-  - [ ] SubTask 1.3: 搭建 `server/src/app.ts`（Fastify 实例、插件注册、统一前缀 `/api/v1`）、`server/src/main.ts`（启动监听 7077）、`server/src/config.ts`（配置：端口/JWT 密钥/数据路径/信创预留位）
+  - [ ] SubTask 1.3: 搭建 `server/src/app.ts`（Fastify 实例、插件注册、统一前缀 `/api/v1`）、`server/src/main.ts`（启动监听 7077）、`server/src/config.ts`（配置：端口/JWT 密钥/数据路径/信创预留位/`AI_API_BASE`+`AI_API_KEY`+`AI_MODEL`）
   - [ ] SubTask 1.4: 实现 `/health` 与 `/metrics`（Prometheus 文本格式）端点，注册全局请求日志 `pino`
 
 - [ ] Task 2: 数据库与种子数据
-  - [ ] SubTask 2.1: `server/src/db/schema.sql` 建表：`users`、`organizations`、`accounts`、`transactions`、`counterparties`、`risk_warnings`、`work_orders`、`rules`、`collection_tasks`、`data_sources`、`collection_logs`、`data_quality_issues`、`audit_logs`、`graph_nodes`、`graph_edges`（含 ODS/DWD/DWS/ADS 分层注释）`[P]`
+  - [ ] SubTask 2.1: `server/src/db/schema.sql` 建表：`users`、`organizations`、`accounts`、`transactions`、`counterparties`、`risk_warnings`、`work_orders`、`rules`、`collection_tasks`、`data_sources`、`collection_logs`、`data_quality_issues`、`audit_logs`、`graph_nodes`、`graph_edges`、`sanitizer_policies`、`ai_call_logs`（含 ODS/DWD/DWS/ADS 分层注释）`[P]`
   - [ ] SubTask 2.2: `server/src/db/index.ts` 封装 `better-sqlite3` 连接（WAL 模式、pragma 优化、自动建表）`[P]`
   - [ ] SubTask 2.3: `server/src/db/seed.ts` 将 `src/mock/index.ts` 数据迁入数据库（KPI 派生、centers、domains、riskWarnings、workOrders、collectionTasks、dataSources、graphNodes/Edges、penetrationTree→organizations+accounts+transactions、rules 初始规则集）
   - [ ] SubTask 2.4: `server/src/db/repository.ts` 通用仓储层（分页/过滤/排序辅助）
@@ -36,8 +36,7 @@
   - [ ] SubTask 5.4: `server/src/modules/monitoring/graph.ts`：图谱邻接表（内存 + SQLite 持久化）、二度/长路径遍历、资金流向检索
   - [ ] SubTask 5.5: `server/src/modules/monitoring/penetration.ts`：穿透树构建（组织层级 + 账户 + 流水），关键字检索（主体/资金/合同/项目）
   - [ ] SubTask 5.6: `server/src/modules/monitoring/analytics.ts`：监管态势聚合（Doris 等价：KPI、doughnut、healthBars、collectionTrend、financeTrend）
-  - [ ] SubTask 5.7: `server/src/modules/monitoring/ai.ts`：自然语言查询占位接口（阶段 4 预留）
-  - [ ] SubTask 5.8: `server/src/modules/monitoring/routes.ts`：`/monitoring/rules`、`/monitoring/risk-warnings`、`/monitoring/graph`、`/monitoring/penetration`、`/monitoring/overview`、`/monitoring/trend`、`/monitoring/finance/*` 路由
+  - [ ] SubTask 5.7: `server/src/modules/monitoring/routes.ts`：`/monitoring/rules`、`/monitoring/risk-warnings`、`/monitoring/graph`、`/monitoring/penetration`、`/monitoring/overview`、`/monitoring/trend`、`/monitoring/finance/*` 路由（原 ai 占位移至 Task 11）
 
 - [ ] Task 6: 调度指挥中心模块
   - [ ] SubTask 6.1: `server/src/modules/dispatch/workflow.ts`：工单状态机（verify→rectify→review→archive），流转/回退/超时转办 `[P]`
@@ -63,17 +62,28 @@
   - [ ] SubTask 9.4: `package.json` 增加 `server`、`server:dev`、`dev:all`（concurrently 前后台）、`.env`/`.env.example`（`VITE_API_BASE`、`VITE_USE_MOCK`）
   - [ ] SubTask 9.5: 校验前端 17 个页面在真实后端模式下数据正常加载、交互（筛选/抽屉/工单流转）正常
 
-- [ ] Task 10: 联调验证与文档
-  - [ ] SubTask 10.1: 端到端联调：登录→总览→风险预警→派单→工单流转→大屏更新 闭环验证
-  - [ ] SubTask 10.2: `VITE_USE_MOCK=true` 回退验证，确认无后端可独立运行
-  - [ ] 10.3: 更新 `.trae/documents/技术架构.md` §1/§4/§11 反映后端落地（仅追加，不改前端契约）
-  - [ ] SubTask 10.4: 编写后端启动与接口自测脚本（`server/scripts/smoke.sh` 或 `smoke.ts`，curl 关键接口）
+- [ ] Task 10: 人工智能模块与数据脱敏
+  - [ ] SubTask 10.1: `server/src/modules/ai/sanitizer.ts`：脱敏管道 `sanitizeForAI(payload, policy)`，支持掩码/哈希/替换/区间化四种算法，覆盖身份证/银行卡/手机号/姓名/金额/账户号/统一社会信用代码 `[P]`
+  - [ ] SubTask 10.2: `server/src/modules/ai/sanitizer-policies.ts`：脱敏策略 CRUD（`sanitizer_policies` 表），按角色/字段/数据源配置，启停管理 `[P]`
+  - [ ] SubTask 10.3: `server/src/modules/ai/llm-adapter.ts`：可插拔 LLM 适配器，对接 `AI_API_BASE`（OpenAI 兼容），未配置返回占位；统一走脱敏管道
+  - [ ] SubTask 10.4: `server/src/modules/ai/ai-service.ts`：自然语言穿透查询（`POST /api/v1/ai/query`）、合同违规审查（`/ai/contract-review`）、风险报告生成（`/ai/risk-report`），均先脱敏再调 LLM
+  - [ ] SubTask 10.5: `server/src/modules/ai/ai-logs.ts`：AI 调用全链路日志（`ai_call_logs` 表：调用者/端点/脱敏后入参摘要/出参摘要/耗时/token），`GET /api/v1/ai/logs` 查询
+  - [ ] SubTask 10.6: `server/src/modules/ai/routes.ts`：`/ai/query`、`/ai/contract-review`、`/ai/risk-report`、`/ai/health`、`/ai/sanitizer/policies`、`/ai/logs` 路由
+  - [ ] SubTask 10.7: 种子脱敏策略（默认策略集：银行卡掩码、身份证掩码、手机号掩码、姓名掩码、金额区间化、账户号掩码）
+
+- [ ] Task 11: 联调验证与文档
+  - [ ] SubTask 11.1: 端到端联调：登录→总览→风险预警→派单→工单流转→大屏更新 闭环验证
+  - [ ] SubTask 11.2: `VITE_USE_MOCK=true` 回退验证，确认无后端可独立运行
+  - [ ] SubTask 11.3: AI 链路验证：未配置 `AI_API_BASE` 时返回占位；配置后脱敏→调用→记日志闭环；验证脱敏后载荷无原始敏感数据
+  - [ ] SubTask 11.4: 更新 `.trae/documents/技术架构.md` §1/§4/§11 反映后端落地与 AI/脱敏链路（仅追加，不改前端契约）
+  - [ ] SubTask 11.5: 编写后端启动与接口自测脚本（`server/scripts/smoke.sh` 或 `smoke.ts`，curl 关键接口含 `/ai/*`）
 
 # Task Dependencies
 - Task 1 → Task 2（骨架先于数据库）
-- Task 2 → Task 3/4/5/6/7（模块依赖仓储层）
+- Task 2 → Task 3/4/5/6/7/10（模块依赖仓储层）
 - Task 3（EventBus）→ Task 5.2、Task 6.3（异步事件依赖）
 - Task 5.2（规则引擎）→ Task 6.3（自动派单消费风险事件）
-- Task 4/5/6/7 → Task 8（路由汇总）
-- Task 8 → Task 9.5 → Task 10（前后台联调依赖后端就绪）
-- 可并行：Task 4 与 Task 6（不同中心）、Task 3 与 Task 2（骨架与建表并行）
+- Task 10.1（脱敏管道）→ Task 10.3/10.4（LLM 适配器与 AI 服务依赖脱敏前置）
+- Task 4/5/6/7/10 → Task 8（路由汇总，含 `/ai/**`）
+- Task 8 → Task 9.5 → Task 11（前后台联调依赖后端就绪，AI 链路在 Task 10 完成后验证）
+- 可并行：Task 4 与 Task 6（不同中心）、Task 3 与 Task 2（骨架与建表并行）、Task 10 与 Task 7（AI 模块与系统模块并行）

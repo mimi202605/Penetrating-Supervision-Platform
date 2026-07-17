@@ -10,8 +10,8 @@
 - [ ] `GET /metrics` 返回 Prometheus 文本格式指标（至少含 `http_requests_total`）
 
 ## 数据库与种子
-- [ ] `schema.sql` 覆盖三中心全部业务实体表（含 ODS/DWD/DWS/ADS 分层注释）
-- [ ] 首次启动自动建表并灌入种子数据（与 `src/mock/index.ts` 一致）
+- [ ] `schema.sql` 覆盖三中心全部业务实体表（含 ODS/DWD/DWS/ADS 分层注释），含 `sanitizer_policies`、`ai_call_logs` 表
+- [ ] 首次启动自动建表并灌入种子数据（与 `src/mock/index.ts` 一致，含默认脱敏策略集）
 - [ ] 二次启动不重复灌入（幂等，按 id 去重）
 - [ ] `better-sqlite3` 启用 WAL，pragma 优化已配置
 
@@ -50,6 +50,18 @@
 - [ ] 审计日志记录登录/查询/处置操作，`GET /api/v1/system/audit` 可查询
 - [ ] `GET /api/v1/system/settings` 返回系统配置
 
+## 人工智能与数据脱敏
+- [ ] `sanitizeForAI(payload, policy)` 脱敏管道实现，支持掩码/哈希/替换/区间化四种算法
+- [ ] 默认脱敏策略种子数据已灌入 `sanitizer_policies`（银行卡/身份证/手机号/姓名/金额/账户号/统一社会信用代码）
+- [ ] `GET/POST /api/v1/ai/sanitizer/policies` 脱敏策略 CRUD 可用，支持启停
+- [ ] 任何 `/api/v1/ai/**` 调用前业务载荷 MUST 先经脱敏，脱敏后载荷无原始敏感数据（验证：银行卡号变为掩码、身份证变为掩码）
+- [ ] 脱敏事件写审计日志（含原字段指纹、脱敏算法、操作人）
+- [ ] `GET /api/v1/ai/health` 返回 AI 适配器状态（configured/provider/endpoint 脱敏/latency）
+- [ ] `AI_API_BASE` 未配置时 `POST /api/v1/ai/query` 返回结构化占位响应（含意图/建议查询模板/配置提示），主流程不阻塞
+- [ ] `AI_API_BASE` 已配置时走「脱敏→调用 LLM→记日志」闭环，返回真实结果
+- [ ] AI 调用全链路写 `ai_call_logs`（调用者/端点/脱敏后入参摘要/出参摘要/耗时/token），`GET /api/v1/ai/logs` 可查询
+- [ ] `/ai/contract-review`、`/ai/risk-report` 端口预留可用（占位或真实调用）
+
 ## 前后台衔接
 - [ ] `src/api/index.ts` 默认调用真实后端，`VITE_USE_MOCK=true` 回退 mock
 - [ ] `vite.config.ts` `/api` 代理至 7077 生效
@@ -62,11 +74,14 @@
 ## 闭环验证
 - [ ] 端到端闭环：登录→总览→风险预警→派单→工单流转(4节点)→归档→大屏数据更新
 - [ ] 规则评估→风险生成→自动派单→工单处置→风险状态回写 全链路通
-- [ ] 后端自测脚本 `smoke` 全部接口返回 2xx
+- [ ] AI 链路闭环：AI 查询请求→脱敏管道→LLM 适配器（占位或真实）→响应→ai_call_logs 记录，脱敏后载荷零敏感数据
+- [ ] 后端自测脚本 `smoke` 全部接口返回 2xx（含 `/ai/*`）
 
 ## 非功能
 - [ ] 所有引入依赖协议为 Apache-2.0/MIT，无 GPL/AGPL 传染性风险
-- [ ] 无外部进程依赖（不要求 Redis/MySQL/Doris/NebulaGraph 独立服务）
+- [ ] 无外部进程依赖（不要求 Redis/MySQL/Doris/NebulaGraph/LLM 独立服务，AI 通过可配置 HTTP 端点对接）
+- [ ] `AI_API_BASE` 未配置时主流程不受影响，AI 接口返回结构化占位
+- [ ] AI 链路零原始敏感数据外送（脱敏强约束验证通过）
 - [ ] `src/api/types.ts` 原有类型契约未被破坏（前端 `pnpm check` 通过）
 - [ ] 后端 `pnpm check`（tsc --noEmit）通过
-- [ ] `.trae/documents/技术架构.md` 已追加后端落地说明（§1/§4/§11）
+- [ ] `.trae/documents/技术架构.md` 已追加后端落地说明与 AI/脱敏链路（§1/§4/§11）
