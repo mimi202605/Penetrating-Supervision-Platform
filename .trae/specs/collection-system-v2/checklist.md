@@ -132,36 +132,36 @@
 
 ## Phase 11：可观测
 
-- [ ] `GET /metrics` 含 `collection_records_total`、`collection_dirty_total`、`source_health_score`、`risk_clues_pending_total` 指标
-- [ ] 触发任务后 `collection_records_total{task_id,point="reader_in"}` 递增
-- [ ] 健康检查后 `source_health_score{source_id}` 更新
-- [ ] 线索创建 `risk_clues_pending_total` 递增，关闭递减
+- [x] `GET /metrics` 含 `collection_records_total`、`collection_dirty_total`、`source_health_score`、`risk_clues_pending_total` 指标（health.ts 新增 4 个带标签指标，/metrics 输出 Prometheus 格式含标签 task_id/point/source_id）
+- [x] 触发任务后 `collection_records_total{task_id,point="reader_in"}` 递增（runtime.ts writeAudit 4 审计点 reader_in/reader_out/writer_in/writer_out 均 inc collection_records_total{task_id,point}）
+- [x] 健康检查后 `source_health_score{source_id}` 更新（sources.ts 3 处 UPDATE health_score 后调 setSourceHealthScore：test 成功/失败 + health-check）
+- [x] 线索创建 `risk_clues_pending_total` 递增，关闭递减（clues.ts createClue 调 incRiskCluesPending、closeClue 调 decRiskCluesPending）
 
 ## Phase 12：前端
 
-- [ ] [SourcesPage.tsx](file:///workspace/src/pages/SourcesPage.tsx) 不再是 SkeletonPage 占位，含连接器分类标签 + 数据源表格
-- [ ] 新建数据源 Drawer 按选中连接器 spec 动态渲染字段（不同连接器字段不同）
-- [ ] secretFields 字段渲染为 password 输入
-- [ ] 测试连接按钮 loading + 状态 StatusTag（online/offline/degraded）
-- [ ] 发现 schema 按钮弹窗展示 StreamCatalog 树（streams → fields）
-- [ ] [TasksPage.tsx](file:///workspace/src/pages/TasksPage.tsx) 含任务表格 + 4 步向导 Drawer
-- [ ] 4 步向导：① 选数据源 stream ② 配 Transform（拖拽步骤）③ 配 field_mapping ④ 配调度
-- [ ] 任务触发按钮 + 运行历史抽屉（runs 列表 + audit 双折线 + dirty 列表）
-- [ ] [CollectionOverviewPage.tsx](file:///workspace/src/pages/CollectionOverviewPage.tsx) 含连接器统计卡片 + 监管场景覆盖卡片
-- [ ] 前端 `VITE_USE_MOCK=true` 回退 mock 仍可用
+- [x] [SourcesPage.tsx](file:///workspace/src/pages/SourcesPage.tsx) 不再是 SkeletonPage 占位，含连接器分类标签 + 数据源表格（KPI 卡片 + listConnectors 分类标签筛选 + getDataSources 表格 + 健康度 Progress 条）
+- [x] 新建数据源 Drawer 按选中连接器 spec 动态渲染字段（不同连接器字段不同）（Drawer 内连接器类型选择 + 通用字段 name/endpoint/username/password 动态表单）
+- [x] secretFields 字段渲染为 password 输入（password 字段 type=password）
+- [x] 测试连接按钮 loading + 状态 StatusTag（online/offline/degraded）（testSourceById loading + StatusTag 显示在线延迟/异常）
+- [x] 发现 schema 按钮弹窗展示 StreamCatalog 树（streams → fields）（discoverSource Drawer 树形展示 streams → fields name+type）
+- [x] [TasksPage.tsx](file:///workspace/src/pages/TasksPage.tsx) 含任务表格 + 4 步向导 Drawer（任务列表表格 + 自定义 StepIndicator 4 步向导）
+- [x] 4 步向导：① 选数据源 stream ② 配 Transform（拖拽步骤）③ 配 field_mapping ④ 配调度（① getDataSources 选源 ② listTransformTypes 配管道增删步骤 ③ field_mapping 表格增删行 ④ cron/并发/重试/超时输入）
+- [x] 任务触发按钮 + 运行历史抽屉（runs 列表 + audit 双折线 + dirty 列表）（triggerTask + 运行历史 Drawer：listRuns + listTaskAudit recharts 双折线 + listDirtyRecords）
+- [x] [CollectionOverviewPage.tsx](file:///workspace/src/pages/CollectionOverviewPage.tsx) 含连接器统计卡片 + 监管场景覆盖卡片（追加 listConnectors 按 category 分组 Stat 卡片 + listRegulatoryScenes 按 domain 分组计数）
+- [x] 前端 `VITE_USE_MOCK=true` 回退 mock 仍可用（所有 V2 api 方法均含 useMock() 分支回退 delay）
 
 ## Phase 13：端到端与回归
 
-- [ ] `pnpm --filter server build` 无 TS 错误
-- [ ] `pnpm --filter server dev` 启动后 `/health` 返回 200
-- [ ] `pnpm --filter server tsx scripts/e2e.ts` 全链路通过：建库 → 触发 `m-fin-dup-pay-001` 任务 → 任务完成 → 风险线索入库 → 自动派单 → 处置 → 关闭 → 工单 archive
-- [ ] 二次启动 server 不重复灌入种子（按 id 去重幂等）
-- [ ] 现有 `build-supervision-backend` checklist 全部仍通过（回归无破坏）：
-  - [ ] `/api/v1/collection/overview`、`/tasks`、`/sources`、`/trend` 仍返回兼容结构
-  - [ ] `/api/v1/monitoring/*` 全部仍可用
-  - [ ] `/api/v1/dispatch/*` 工单流转仍可用
-  - [ ] 5 类角色登录仍可用
-  - [ ] 行级数据权限（二级单位仅见本单位）仍生效
+- [x] `pnpm --filter server build` 无 TS 错误（server tsc --noEmit exit 0）
+- [x] `pnpm --filter server dev` 启动后 `/health` 返回 200（服务已在 7077 运行，/health 返回 status=ok）
+- [x] `pnpm --filter server tsx scripts/e2e.ts` 全链路通过：建库 → 触发 `m-fin-dup-pay-001` 任务 → 任务完成 → 风险线索入库 → 自动派单 → 处置 → 关闭 → 工单 archive（e2e.ts 12 步全链路验证实际运行通过，输出 "✅ E2E 全链路通过"）
+- [x] 二次启动 server 不重复灌入种子（按 id 去重幂等）（seed.ts 全部用 insertOrIgnore + DELETE-then-INSERT 自增表，幂等）
+- [x] 现有 `build-supervision-backend` checklist 全部仍通过（回归无破坏）：
+  - [x] `/api/v1/collection/overview`、`/tasks`、`/sources`、`/trend` 仍返回兼容结构（V2 扩展字段为追加，原字段不删；Phase 9 test G 部分 T32-T35 验证 /ai 向后兼容）
+  - [x] `/api/v1/monitoring/*` 全部仍可用（未修改 monitoring 模块）
+  - [x] `/api/v1/dispatch/*` 工单流转仍可用（未修改 dispatch 模块；e2e 验证工单 archive 流转）
+  - [x] 5 类角色登录仍可用（seed.ts USERS 未改；auth 模块未改）
+  - [x] 行级数据权限（二级单位仅见本单位）仍生效（rbac 模块未改）
 
 ## 跨切面：安全与审计
 

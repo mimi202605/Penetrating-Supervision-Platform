@@ -208,3 +208,203 @@ export interface DashboardResponse {
     byOwner: { owner: string; count: number }[];
   };
 }
+
+/* ===================== V2 数据源管理与采集系统增补类型 ===================== */
+
+// 连接器分类
+export type ConnectorCategory = "erp" | "db" | "file" | "mq" | "saas";
+
+// 连接器 spec 元数据（对齐 GET /collection/connectors）
+export interface Connector {
+  type: string;
+  name: string;
+  category: ConnectorCategory;
+  description?: string;
+  capabilities: string[];
+  spec?: Record<string, unknown>; // JsonSchema
+  secretFields?: string[];
+  implemented: boolean;
+}
+
+// StreamCatalog（对齐 GET /collection/sources/:id/discover）
+export interface StreamField {
+  name: string;
+  type: string;
+  description?: string;
+}
+export interface StreamCatalog {
+  streams: {
+    name: string;
+    description?: string;
+    fields: StreamField[];
+  }[];
+}
+
+// Transform 类型与管道（对齐 GET /collection/transforms/types）
+export interface TransformType {
+  type: string;
+  name: string;
+  configSchema?: Record<string, unknown>;
+}
+export interface TransformStep {
+  id: string;
+  type: string;
+  config: Record<string, unknown>;
+  onError?: "skip" | "fail";
+}
+export interface TransformPipeline {
+  steps: TransformStep[];
+}
+
+// 采集任务运行记录（对齐 GET /collection/tasks/:id/runs）
+export interface CollectionTaskRun {
+  id: string;
+  taskId: string;
+  attempt: number;
+  status: string;
+  startedAt: string;
+  finishedAt?: string;
+  recordsRead: number;
+  recordsWrite: number;
+  recordsDirty: number;
+  bytesRead: number;
+  error?: string | null;
+  checkpoint?: string | null;
+}
+
+// Checkpoint（对齐 GET /collection/tasks/:id/checkpoints）
+export interface Checkpoint {
+  taskId: string;
+  shardId: string;
+  state: string;
+}
+
+// 脏数据记录（对齐 GET /collection/tasks/:id/dirty）
+export interface DirtyRecord {
+  taskId: string;
+  runId: string;
+  stepId: string;
+  raw: Record<string, unknown>;
+  error: string;
+}
+
+// 审计点（对齐 GET /collection/tasks/:id/audit）
+export interface AuditPoint {
+  taskId: string;
+  auditPoint: string;
+  logTs: string;
+  count: number;
+  bytes: number;
+  delayMs: number;
+}
+
+// 监管场景（对齐 GET /regulatory/scenes）
+export interface RegulatoryScene {
+  id: string;
+  domain: string;
+  name: string;
+  description?: string;
+  status?: string;
+}
+
+// 监管模型（对齐 GET /regulatory/models/:id）
+export interface RegulatoryModel {
+  id: string;
+  sceneId: string;
+  domain: string;
+  name: string;
+  ruleDsl?: Record<string, unknown>;
+  status: string;
+  indicators?: unknown[];
+}
+
+// 风险线索（对齐 GET /risk/clues）
+export interface RiskClue {
+  id: string;
+  sceneId: string;
+  modelId: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  riskLevel: "yellow" | "orange" | "red";
+  riskValue?: string | null;
+  description?: string | null;
+  status: "pending" | "dispatched" | "disposed" | "closed";
+  detectedAt: string;
+  dueAt: string;
+  assignedTo?: string | null;
+  orgCode?: string | null;
+  evidenceJson?: Record<string, unknown> | null;
+  workOrderId?: string | null;
+}
+
+// 风险处置记录（对齐 GET /risk/clues/:id/disposals）
+export interface RiskDisposal {
+  id: number;
+  clueId: string;
+  step: string;
+  handler: string;
+  comment?: string;
+  roleCode?: string;
+  createdAt: string;
+}
+
+// 联查规则（对齐 GET /linkage/rules）
+export interface LinkageRule {
+  id: string;
+  sceneId?: string;
+  name: string;
+  drillPath: string[];
+  description?: string;
+}
+
+// AI 智能体 spec（对齐 GET /ai/agents）
+export type AgentCategory = "extract" | "compare" | "generate" | "analyze" | "transform";
+export type AgentProtocol = "mcp" | "a2a" | "internal";
+export interface Agent {
+  id: string;
+  name: string;
+  category: AgentCategory;
+  capabilities: string[];
+  inputSchema: string;
+  outputSchema: string;
+  protocol: AgentProtocol;
+  model: string;
+  description?: string;
+  implemented: boolean;
+}
+
+// 穿透层级（对齐 GET /penetration/*）
+export type PenetrationLayer = "ads" | "dws" | "dwd" | "ods";
+
+// 穿透响应（各级下钻返回）
+export interface PenetrationResult {
+  layer: PenetrationLayer;
+  ids: string[];
+  details?: Record<string, unknown>[];
+}
+
+// 血缘图谱（对齐 GET /penetration/lineage）
+export interface LineageGraph {
+  nodes: { id: string; label?: string; layer?: string }[];
+  edges: { source: string; target: string; label?: string }[];
+}
+
+// 工作流编排结果（对齐 POST /ai/agents/orchestrate）
+export interface OrchestrateResult {
+  workflow: string;
+  status: "success" | "failed" | "partial";
+  nodes: {
+    node: string;
+    status: "pending" | "running" | "success" | "failed" | "skipped";
+    output?: unknown;
+    error?: string;
+    latencyMs: number;
+  }[];
+  finalOutput?: unknown;
+  totalLatencyMs: number;
+}
+
+// 智能体调用响应（通用，按 agent 不同字段不同）
+export interface AgentInvokeResponse {
+  [key: string]: unknown;
+}

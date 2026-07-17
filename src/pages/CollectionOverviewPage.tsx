@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Database, Activity, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Database, Activity, AlertCircle, CheckCircle2, Cable, ShieldCheck } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import Stat from "@/components/ui/Stat";
 import StatusTag from "@/components/ui/StatusTag";
@@ -7,12 +7,35 @@ import DataTable, { type Column } from "@/components/ui/DataTable";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { api } from "@/api";
 import * as mock from "@/mock";
-import type { CollectionTask, TrendPoint } from "@/api/types";
+import type {
+  CollectionTask,
+  TrendPoint,
+  Connector,
+  ConnectorCategory,
+  RegulatoryScene,
+} from "@/api/types";
+
+// 连接器分类标签文案
+const CATEGORY_LABELS: Record<ConnectorCategory, string> = {
+  erp: "ERP",
+  db: "数据库",
+  file: "文件",
+  mq: "消息队列",
+  saas: "SaaS",
+};
 
 export default function CollectionOverviewPage() {
   const [tasks, setTasks] = useState<CollectionTask[]>([]);
   const [trend, setTrend] = useState<TrendPoint[]>(mock.collectionTrend);
   const [loading, setLoading] = useState(true);
+
+  // 连接器统计
+  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [connectorsLoading, setConnectorsLoading] = useState(true);
+
+  // 监管场景
+  const [scenes, setScenes] = useState<RegulatoryScene[]>([]);
+  const [scenesLoading, setScenesLoading] = useState(true);
 
   useEffect(() => {
     api.getCollectionTasks().then((t) => {
@@ -20,7 +43,48 @@ export default function CollectionOverviewPage() {
       setLoading(false);
     });
     api.getCollectionTrend().then(setTrend);
+    // 拉取连接器目录
+    api
+      .listConnectors()
+      .then((c) => {
+        setConnectors(c);
+        setConnectorsLoading(false);
+      })
+      .catch((e) => {
+        console.error("listConnectors failed", e);
+        setConnectorsLoading(false);
+      });
+    // 拉取监管场景
+    api
+      .listRegulatoryScenes()
+      .then((s) => {
+        setScenes(s);
+        setScenesLoading(false);
+      })
+      .catch((e) => {
+        console.error("listRegulatoryScenes failed", e);
+        setScenesLoading(false);
+      });
   }, []);
+
+  // 连接器按 category 分组计数
+  const connectorsByCategory = useMemo(() => {
+    const map: Record<ConnectorCategory, number> = { erp: 0, db: 0, file: 0, mq: 0, saas: 0 };
+    for (const c of connectors) {
+      if (map[c.category] !== undefined) map[c.category] += 1;
+    }
+    return map;
+  }, [connectors]);
+
+  // 监管场景按 domain 分组计数
+  const scenesByDomain = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of scenes) {
+      const d = s.domain || "未分类";
+      map.set(d, (map.get(d) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [scenes]);
 
   const successCount = tasks.filter((t) => t.lastStatus === "成功").length;
   const runningCount = tasks.filter((t) => t.lastStatus === "运行中").length;
@@ -137,6 +201,153 @@ export default function CollectionOverviewPage() {
             rowKey={(r) => r.id}
             empty="暂无采集任务"
           />
+        </section>
+
+        {/* 连接器统计卡片 */}
+        <section className="ds-card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="ds-section-title">连接器统计</h2>
+            <span className="ds-section-sub">
+              {connectorsLoading ? "加载中…" : `共 ${connectors.length} 个连接器 · 按 category 分组`}
+            </span>
+          </div>
+          {!connectorsLoading && connectors.length === 0 ? (
+            <div
+              className="p-3 rounded-sm text-caption"
+              style={{
+                background: "var(--color-surface-container)",
+                color: "var(--color-on-surface-variant)",
+              }}
+            >
+              暂无连接器数据
+            </div>
+          ) : (
+            <>
+              {/* 分类计数 Stat 卡片 */}
+              <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-3">
+                <Stat
+                  icon={<Cable size={16} strokeWidth={1.5} />}
+                  label="连接器总数"
+                  value={connectors.length}
+                  countUp
+                  decimals={0}
+                />
+                {(Object.keys(CATEGORY_LABELS) as ConnectorCategory[]).map((cat) => (
+                  <Stat
+                    key={cat}
+                    label={CATEGORY_LABELS[cat]}
+                    value={connectorsByCategory[cat]}
+                    countUp
+                    decimals={0}
+                    trend={{ text: cat, tone: "info" }}
+                  />
+                ))}
+              </div>
+              {/* 明细小表格 */}
+              <div className="flex flex-col gap-1.5">
+                {connectors.length === 0 ? null : (
+                  <DataTable
+                    columns={
+                      [
+                        {
+                          key: "name",
+                          title: "连接器",
+                          sticky: true,
+                          render: (c: Connector) => (
+                            <span style={{ color: "var(--color-foreground)" }} className="font-medium">
+                              {c.name}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "type",
+                          title: "类型",
+                          render: (c: Connector) => <span className="td-mono">{c.type}</span>,
+                        },
+                        {
+                          key: "category",
+                          title: "分类",
+                          render: (c: Connector) => (
+                            <StatusTag tone="info">{CATEGORY_LABELS[c.category]}</StatusTag>
+                          ),
+                        },
+                        {
+                          key: "capabilities",
+                          title: "能力",
+                          render: (c: Connector) => (
+                            <span className="text-caption" style={{ color: "var(--color-on-surface-variant)" }}>
+                              {c.capabilities.length > 0 ? c.capabilities.join("、") : "—"}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "implemented",
+                          title: "实现状态",
+                          render: (c: Connector) =>
+                            c.implemented ? (
+                              <StatusTag tone="success" dot>已实现</StatusTag>
+                            ) : (
+                              <StatusTag tone="stop" dot>规划中</StatusTag>
+                            ),
+                        },
+                      ] as Column<Connector>[]
+                    }
+                    data={connectors}
+                    rowKey={(c) => c.type}
+                    empty="暂无连接器"
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* 监管场景覆盖卡片 */}
+        <section className="ds-card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="ds-section-title">监管场景覆盖</h2>
+            <span className="ds-section-sub">
+              {scenesLoading
+                ? "加载中…"
+                : `共 ${scenes.length} 个场景 · 按 domain 分组（已上线模型数后端已就绪，本期不展开 N+1 查询）`}
+            </span>
+          </div>
+          {scenesLoading ? (
+            <div className="text-lead" style={{ color: "var(--color-on-surface-variant)" }}>
+              加载中…
+            </div>
+          ) : scenes.length === 0 ? (
+            <div
+              className="p-3 rounded-sm text-caption"
+              style={{
+                background: "var(--color-surface-container)",
+                color: "var(--color-on-surface-variant)",
+              }}
+            >
+              暂无监管场景数据
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <Stat
+                icon={<ShieldCheck size={16} strokeWidth={1.5} />}
+                label="场景总数"
+                value={scenes.length}
+                countUp
+                decimals={0}
+                trend={{ text: `${scenesByDomain.length} 个 domain`, tone: "info" }}
+              />
+              {scenesByDomain.map(([domain, count]) => (
+                <Stat
+                  key={domain}
+                  label={domain}
+                  value={count}
+                  countUp
+                  decimals={0}
+                  trend={{ text: "场景", tone: "success" }}
+                />
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </PageContainer>

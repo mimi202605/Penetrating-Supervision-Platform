@@ -177,23 +177,25 @@
 
 ## Phase 10：可观测、前端、联调
 
-- [ ] Task 20: health 指标扩展
-  - [ ] SubTask 20.1: [health.ts](file:///workspace/server/src/health.ts) 新增指标 `collection_records_total{task_id,point}`（Counter）、`collection_dirty_total{task_id}`（Counter）、`source_health_score{source_id}`（Gauge）、`risk_clues_pending_total`（Gauge） `[P]`
-  - [ ] SubTask 20.2: runtime.ts 在 4 审计点 inc `collection_records_total`；dirty 写入时 inc `collection_dirty_total`；健康检查时 set `source_health_score`；线索创建时 inc、关闭时 dec `risk_clues_pending_total`
+- [x] Task 20: health 指标扩展
+  - [x] SubTask 20.1: [health.ts](file:///workspace/server/src/health.ts) 新增指标 `collection_records_total{task_id,point}`（Counter）、`collection_dirty_total{task_id}`（Counter）、`source_health_score{source_id}`（Gauge）、`risk_clues_pending_total`（Gauge） `[P]`
+  - [x] SubTask 20.2: runtime.ts 在 4 审计点 inc `collection_records_total`；dirty 写入时 inc `collection_dirty_total`；健康检查时 set `source_health_score`；线索创建时 inc、关闭时 dec `risk_clues_pending_total`
 
-- [ ] Task 21: 前端 API 层
-  - [ ] SubTask 21.1: [src/api/types.ts](file:///workspace/src/api/types.ts) 追加类型：`Connector` / `StreamCatalog` / `TransformType` / `TransformPipeline` / `CollectionTaskRun` / `Checkpoint` / `DirtyRecord` / `AuditPoint` / `RegulatoryScene` / `RegulatoryModel` / `RiskClue` / `RiskDisposal` / `LinkageRule` / `Agent` / `PenetrationLayer`（不破坏现有类型） `[P]`
-  - [ ] SubTask 21.2: [src/api/index.ts](file:///workspace/src/api/index.ts) 追加方法：`listConnectors` / `testSource` / `discoverSource` / `listTransformTypes` / `previewTransform` / `listRuns` / `triggerTask` / `listRegulatoryScenes` / `testModel` / `listClues` / `dispatchClue` / `disposeClue` / `closeClue` / `myTodos` / `drillPenetration` / `getLineage` / `listAgents` / `invokeAgent` / `orchestrateAgents` `[P]`
+- [x] Task 21: 前端 API 层
+  - [x] SubTask 21.1: [src/api/types.ts](file:///workspace/src/api/types.ts) 追加类型：`Connector` / `StreamCatalog` / `TransformType` / `TransformPipeline` / `CollectionTaskRun` / `Checkpoint` / `DirtyRecord` / `AuditPoint` / `RegulatoryScene` / `RegulatoryModel` / `RiskClue` / `RiskDisposal` / `LinkageRule` / `Agent` / `PenetrationLayer`（不破坏现有类型） `[P]`
+  - [x] SubTask 21.2: [src/api/index.ts](file:///workspace/src/api/index.ts) 追加方法：`listConnectors` / `testSource` / `discoverSource` / `listTransformTypes` / `previewTransform` / `listRuns` / `triggerTask` / `listRegulatoryScenes` / `testModel` / `listClues` / `dispatchClue` / `disposeClue` / `closeClue` / `myTodos` / `drillPenetration` / `getLineage` / `listAgents` / `invokeAgent` / `orchestrateAgents` `[P]`
 
-- [ ] Task 22: 前端页面升级
-  - [ ] SubTask 22.1: [SourcesPage.tsx](file:///workspace/src/pages/SourcesPage.tsx)：连接器目录分类标签（ERP/DB/File/MQ/SaaS）+ 数据源列表表格（含健康度 Progress 条）+ 新建 Drawer（按 spec.connectionSpec 动态渲染表单字段，secretFields 字段 type=password）+ 测试连接按钮（loading + 状态 StatusTag）+ 发现 schema 按钮（弹窗展示 StreamCatalog 树） `[P]`
-  - [ ] SubTask 22.2: [TasksPage.tsx](file:///workspace/src/pages/TasksPage.tsx)：任务列表表格（运行状态/进度/吞吐量/脏数据数）+ 4 步向导 Drawer（① 选数据源 stream ② 配 Transform 管道拖拽步骤 ③ 配 field_mapping 表格 ④ 配调度 cron/并发/重试/超时）+ 触发按钮 + 运行历史抽屉（runs 列表 + audit 双折线 + dirty 列表） `[P]`
-  - [ ] SubTask 22.3: [CollectionOverviewPage.tsx](file:///workspace/src/pages/CollectionOverviewPage.tsx)：补连接器统计卡片（按 category 分组计数）+ 监管场景覆盖卡片（按 domain 分组计数 + 已上线模型数） `[P]`
+- [x] Task 22: 前端页面升级
+  - [x] SubTask 22.1: [SourcesPage.tsx](file:///workspace/src/pages/SourcesPage.tsx)：连接器目录分类标签（ERP/DB/File/MQ/SaaS）+ 数据源列表表格（含健康度 Progress 条）+ 新建 Drawer（按 spec.connectionSpec 动态渲染表单字段，secretFields 字段 type=password）+ 测试连接按钮（loading + 状态 StatusTag）+ 发现 schema 按钮（弹窗展示 StreamCatalog 树） `[P]`
+  - [x] SubTask 22.2: [TasksPage.tsx](file:///workspace/src/pages/TasksPage.tsx)：任务列表表格（运行状态/进度/吞吐量/脏数据数）+ 4 步向导 Drawer（① 选数据源 stream ② 配 Transform 管道拖拽步骤 ③ 配 field_mapping 表格 ④ 配调度 cron/并发/重试/超时）+ 触发按钮 + 运行历史抽屉（runs 列表 + audit 双折线 + dirty 列表） `[P]`
+  - [x] SubTask 22.3: [CollectionOverviewPage.tsx](file:///workspace/src/pages/CollectionOverviewPage.tsx)：补连接器统计卡片（按 category 分组计数）+ 监管场景覆盖卡片（按 domain 分组计数 + 已上线模型数） `[P]`
 
-- [ ] Task 23: 种子数据与端到端验证
-  - [ ] SubTask 23.1: [seed.ts](file:///workspace/server/src/db/seed.ts) 追加：6 个 connectors、3 个 data_sources（treasury-sys/jdbc-mysql/file-csv 各一）、3 个 collection_tasks（绑定 scene_id+model_id）、10 条 linkage_rules、30 个 regulatory_positions（集团岗）+ 45 个（直属岗） `[P]`
-  - [ ] SubTask 23.2: 端到端脚本 `server/scripts/e2e.ts`：建库 → 触发 `m-fin-dup-pay-001` 关联任务 → 等待完成 → 校验 risk_clues 入库 → 派单 → 处置 → 关闭；断言全链路状态
-  - [ ] SubTask 23.3: [main.ts](file:///workspace/server/src/main.ts) 启动序列追加：注册 risk listeners / regulatory 路由 / agents 路由
+- [x] Task 23: 种子数据与端到端验证
+  - [x] SubTask 23.1: [seed.ts](file:///workspace/server/src/db/seed.ts) 追加：6 个 connectors、3 个 data_sources（treasury-sys/jdbc-mysql/file-csv 各一）、3 个 collection_tasks（绑定 scene_id+model_id）、10 条 linkage_rules、30 个 regulatory_positions（集团岗）+ 45 个（直属岗） `[P]`
+  - [x] SubTask 23.2: 端到端脚本 `server/scripts/e2e.ts`：建库 → 触发 `m-fin-dup-pay-001` 关联任务 → 等待完成 → 校验 risk_clues 入库 → 派单 → 处置 → 关闭；断言全链路状态
+  - [x] SubTask 23.3: [main.ts](file:///workspace/server/src/main.ts) 启动序列追加：注册 risk listeners / regulatory 路由 / agents 路由
+
+> Phase 10 验证：Task 20 health 指标 4 个带标签指标接入（collection_records_total{task_id,point}/collection_dirty_total{task_id}/source_health_score{source_id}/risk_clues_pending_total），runtime 4 审计点 + dirty + sources 健康检查 + clues 创建/关闭全链路接入，TS 检查通过。Task 21 前端 API 层 types.ts 追加 19 个 V2 类型 + api/index.ts 追加 30+ 方法（连接器/数据源/Transform/任务运行/监管/风险闭环/穿透/AI 智能体），前端 tsc 通过。Task 22 前端页面升级 SourcesPage（连接器分类标签+数据源表格+新建Drawer+测试连接+发现schema+健康度Progress）、TasksPage（任务表格+触发+运行历史Drawer含audit双折线+4步向导）、CollectionOverviewPage 追加连接器统计+监管场景覆盖卡片，遵循 CollectionOverviewPage 风格，前端 tsc 通过。Task 23 种子数据追加 6 connectors + 3 V2 data_sources（含 schema_catalog）+ 3 V2 collection_tasks（绑定 scene+model+script transform）+ 75 regulatory_positions；e2e.ts 12 步全链路验证（模型编译→临时红线模型→任务触发→线索入库→派单→处置→关闭→工单 archive）实际运行通过。linkage_rules 灌入留给 Phase 8 合并后（避免冲突）。关键修复：V2 data_sources 须设 schema_catalog，否则 runtime splits 回退 "default" 导致 mock 连接器 0 记录读取。
 
 ## 验证命令
 

@@ -6,6 +6,7 @@ import { camelize } from "../../utils/case.js";
 import { eventBus } from "../platform/eventbus.js";
 import { logger } from "../../utils/logger.js";
 import { PROGRESS_BY_NODE } from "../dispatch/workflow.js";
+import { incRiskCluesPending, decRiskCluesPending } from "../../health.js";
 
 /** 线索状态 */
 export type ClueStatus =
@@ -165,6 +166,8 @@ export function createClue(input: ClueCreateInput): Record<string, unknown> {
   });
   const clue = getClue(id) as Record<string, unknown>;
   logger.info({ clueId: id, sceneId: input.sceneId, modelId: input.modelId, riskLevel: input.riskLevel }, "风险线索已入库");
+  // 递增 Prometheus 指标 risk_clues_pending_total
+  incRiskCluesPending();
   // emit 线索创建事件（供 dispatch 监听器自动派单）
   eventBus.emit("risk.clue.created", {
     clueId: id,
@@ -248,6 +251,8 @@ export function closeClue(
   });
   // 触发规则反哺事件
   eventBus.emit("risk.clue.closed", { clueId, orderId: clue.work_order_id });
+  // 递减 Prometheus 指标 risk_clues_pending_total
+  decRiskCluesPending();
   logger.info({ clueId, orderId: clue.work_order_id }, "线索已关闭（销警）");
   return { clueId, orderId: clue.work_order_id };
 }

@@ -18,6 +18,7 @@ import type {
 import { ErrorLimitExceeded } from "./transform/types.js";
 import { writeRecordsToSink } from "./sink.js";
 import { runQualityCheck } from "./quality.js";
+import { incCollectionRecords, incCollectionDirty } from "../../health.js";
 
 /** 任务运行选项 */
 export interface RunTaskOptions {
@@ -131,6 +132,8 @@ function writeAudit(taskId: string, point: string, count: number, bytes: number)
     "INSERT INTO collection_audit (task_id, audit_point, log_ts, count, bytes, delay_ms) VALUES (?, ?, ?, ?, ?, 0)",
     [taskId, point, new Date().toISOString().slice(0, 16).replace("T", " "), count, bytes],
   );
+  // 同步递增 Prometheus 指标 collection_records_total{task_id,point}
+  incCollectionRecords(taskId, point, count);
 }
 
 /** 写 data_lineage */
@@ -147,6 +150,8 @@ function writeDirty(taskId: string, runId: string, d: DirtyRecord): void {
     "INSERT INTO dirty_records (task_id, run_id, step_id, raw_json, error) VALUES (?, ?, ?, ?, ?)",
     [taskId, runId, d.stepId, JSON.stringify(d.raw), d.error],
   );
+  // 同步递增 Prometheus 指标 collection_dirty_total{task_id}
+  incCollectionDirty(taskId);
 }
 
 /** 写 collection_task_runs（开始） */
