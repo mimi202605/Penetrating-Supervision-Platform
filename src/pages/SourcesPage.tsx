@@ -228,23 +228,26 @@ export default function SourcesPage() {
       return;
     }
     setSubmitting(true);
-    // 后端 POST /collection/sources 暂未封装，简化为前端状态更新 + 提示
-    window.setTimeout(() => {
-      const newSource: DataSource = {
-        id: `DS-${Date.now()}`,
+    api
+      .createSource({
         name: createForm.name.trim(),
-        type: createForm.connectorType,
-        status: "online",
-        records: "0 条",
-        updateFreq: "—",
-        owner: createForm.username || "—",
-      };
-      setSources((prev) => [newSource, ...prev]);
-      setSubmitting(false);
-      setCreateOpen(false);
-      setCreateForm({ connectorType: "", name: "", endpoint: "", username: "", password: "" });
-      showToast("新建数据源已保存（新建功能后端已就绪）", "success");
-    }, 400);
+        connectorType: createForm.connectorType,
+        endpoint: createForm.endpoint || undefined,
+        username: createForm.username || undefined,
+        password: createForm.password || undefined,
+        owner: createForm.username || undefined,
+      })
+      .then((newSource) => {
+        setSources((prev) => [newSource, ...prev]);
+        setCreateOpen(false);
+        setCreateForm({ connectorType: "", name: "", endpoint: "", username: "", password: "" });
+        showToast("新建数据源已保存", "success");
+      })
+      .catch((e) => {
+        console.error("createSource failed", e);
+        showToast("新建数据源失败", "error");
+      })
+      .finally(() => setSubmitting(false));
   };
 
   const columns: Column<DataSource>[] = [

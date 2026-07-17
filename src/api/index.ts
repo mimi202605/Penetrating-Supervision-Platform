@@ -372,29 +372,29 @@ export const api = {
   /* ============ V2：连接器目录与数据源 ============ */
   listConnectors: (): Promise<Connector[]> =>
     useMock()
-      ? delay([])
+      ? delay(mock.connectors)
       : request<{ list: Connector[] }>("/collection/connectors").then((r) => r.list),
   getConnector: (type: string): Promise<Connector> =>
     useMock()
-      ? delay({ type, name: type, category: "db", capabilities: [], implemented: false } as Connector)
+      ? delay(mock.connectors.find((c) => c.type === type) ?? { type, name: type, category: "db", capabilities: [], implemented: false } as Connector)
       : request<Connector>(`/collection/connectors/${encodeURIComponent(type)}`),
   testSource: (config: Record<string, unknown>): Promise<{ status: string; latencyMs: number; error?: string }> =>
     useMock()
-      ? delay({ status: "online", latencyMs: 10 })
+      ? delay({ status: "online", latencyMs: Math.floor(Math.random() * 50 + 10) })
       : request<{ status: string; latencyMs: number; error?: string }>("/collection/sources/test", {
           method: "POST",
           body: config,
         }),
   testSourceById: (id: string): Promise<{ status: string; latencyMs: number; error?: string }> =>
     useMock()
-      ? delay({ status: "online", latencyMs: 10 })
+      ? delay({ status: "online", latencyMs: Math.floor(Math.random() * 50 + 10) })
       : request<{ status: string; latencyMs: number; error?: string }>(
           `/collection/sources/${encodeURIComponent(id)}/test`,
           { method: "POST" },
         ),
   discoverSource: (id: string): Promise<StreamCatalog> =>
     useMock()
-      ? delay({ streams: [] })
+      ? delay(mock.streamCatalog)
       : request<StreamCatalog>(`/collection/sources/${encodeURIComponent(id)}/discover`, {
           method: "POST",
         }),
@@ -402,20 +402,64 @@ export const api = {
     id: string,
   ): Promise<{ checkedAt: string; latencyMs: number; status: string; error?: string }[]> =>
     useMock()
-      ? delay([])
+      ? delay([
+          { checkedAt: "2026-07-16 09:00:00", latencyMs: 12, status: "online" },
+          { checkedAt: "2026-07-16 06:00:00", latencyMs: 18, status: "online" },
+          { checkedAt: "2026-07-16 03:00:00", latencyMs: 9, status: "online" },
+          { checkedAt: "2026-07-15 23:00:00", latencyMs: 350, status: "degraded", error: "超时" },
+        ])
       : request<{ checkedAt: string; latencyMs: number; status: string; error?: string }[]>(
           `/collection/sources/${encodeURIComponent(id)}/health-history`,
         ),
+  createSource: (payload: {
+    name: string;
+    connectorType: string;
+    endpoint?: string;
+    username?: string;
+    password?: string;
+    config?: Record<string, unknown>;
+    sceneId?: string;
+    type?: string;
+    owner?: string;
+  }): Promise<DataSource> =>
+    useMock()
+      ? delay({
+          id: `DS-${Date.now()}`,
+          name: payload.name,
+          type: payload.type || payload.connectorType || "REST API",
+          status: "online",
+          records: "0 条",
+          updateFreq: payload.config && (payload.config as { updateFreq?: string }).updateFreq ? (payload.config as { updateFreq: string }).updateFreq : "实时",
+          owner: payload.owner || payload.username || "—",
+        } as DataSource)
+      : request<DataSource>("/collection/sources", { method: "POST", body: payload }),
+  updateSource: (id: string, payload: Partial<{
+    name: string;
+    connectorType: string;
+    endpoint?: string;
+    username?: string;
+    password?: string;
+    config?: Record<string, unknown>;
+    sceneId?: string;
+    owner?: string;
+  }>): Promise<DataSource> =>
+    useMock()
+      ? delay({ id, name: payload.name ?? "", type: payload.connectorType ?? "", status: "online", records: "0 条", updateFreq: "实时", owner: payload.owner ?? "—" } as DataSource)
+      : request<DataSource>(`/collection/sources/${encodeURIComponent(id)}`, { method: "PUT", body: payload }),
+  deleteSource: (id: string): Promise<{ success: boolean }> =>
+    useMock()
+      ? delay({ success: true })
+      : request<{ success: boolean }>(`/collection/sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   /* ============ V2：Transform 管道 ============ */
   listTransformTypes: (): Promise<TransformType[]> =>
-    useMock() ? delay([]) : request<TransformType[]>("/collection/transforms/types"),
+    useMock() ? delay(mock.transformTypes) : request<TransformType[]>("/collection/transforms/types"),
   previewTransform: (
     sample: Record<string, unknown>,
     pipeline: TransformPipeline,
   ): Promise<unknown> =>
     useMock()
-      ? delay({ output: sample })
+      ? delay({ output: sample, dirtyCount: 0 })
       : request<unknown>("/collection/transforms/preview", {
           method: "POST",
           body: { sample, pipeline },
@@ -431,35 +475,50 @@ export const api = {
         ),
   listRuns: (taskId: string): Promise<CollectionTaskRun[]> =>
     useMock()
-      ? delay([])
+      ? delay(mock.collectionTaskRuns.filter((r) => r.taskId === taskId))
       : request<CollectionTaskRun[]>(`/collection/tasks/${encodeURIComponent(taskId)}/runs`),
   listCheckpoints: (taskId: string): Promise<Checkpoint[]> =>
     useMock()
-      ? delay([])
+      ? delay(
+          mock.collectionTaskRuns
+            .filter((r) => r.taskId === taskId && r.checkpoint)
+            .map((r) => ({ taskId, shardId: "shard-0", state: r.checkpoint as string })),
+        )
       : request<Checkpoint[]>(`/collection/tasks/${encodeURIComponent(taskId)}/checkpoints`),
   listDirtyRecords: (taskId: string, runId?: string): Promise<DirtyRecord[]> =>
     useMock()
-      ? delay([])
+      ? delay(
+          mock.dirtyRecords.filter(
+            (d) => d.taskId === taskId && (!runId || d.runId === runId),
+          ),
+        )
       : request<DirtyRecord[]>(`/collection/tasks/${encodeURIComponent(taskId)}/dirty`, {
           query: { runId },
         }),
   listTaskAudit: (taskId: string): Promise<AuditPoint[]> =>
     useMock()
-      ? delay([])
+      ? delay(mock.auditPoints.filter((a) => a.taskId === taskId))
       : request<AuditPoint[]>(`/collection/tasks/${encodeURIComponent(taskId)}/audit`),
 
   /* ============ V2：监管场景与模型 ============ */
   listRegulatoryScenes: (domain?: string): Promise<RegulatoryScene[]> =>
     useMock()
-      ? delay([])
+      ? delay(mock.regulatoryScenes.filter((s) => !domain || s.domain === domain))
       : request<RegulatoryScene[]>("/regulatory/scenes", { query: { domain } }),
   getRegulatoryModel: (id: string): Promise<RegulatoryModel> =>
     useMock()
-      ? delay({ id, sceneId: "", domain: "", name: "", status: "online" } as RegulatoryModel)
+      ? delay({
+          id,
+          sceneId: id.startsWith("m-fin-") ? `sc-fin-${id.split("-")[2]}` : "",
+          domain: "finance-risk",
+          name: id,
+          status: "online",
+          indicators: [],
+        } as RegulatoryModel)
       : request<RegulatoryModel>(`/regulatory/models/${encodeURIComponent(id)}`),
   testModel: (id: string, facts: Record<string, unknown>): Promise<unknown> =>
     useMock()
-      ? delay({ matched: false, facts })
+      ? delay({ matched: true, modelId: id, facts, hits: [{ level: "yellow", evidence: facts }] })
       : request<unknown>(`/regulatory/models/${encodeURIComponent(id)}/test`, {
           method: "POST",
           body: { facts },
@@ -474,7 +533,15 @@ export const api = {
     limit?: number;
   } = {}): Promise<RiskClue[]> =>
     useMock()
-      ? delay([])
+      ? delay(
+          mock.riskClues.filter((c) => {
+            if (filter.status && c.status !== filter.status) return false;
+            if (filter.riskLevel && c.riskLevel !== filter.riskLevel) return false;
+            if (filter.sceneId && c.sceneId !== filter.sceneId) return false;
+            if (filter.orgCode && c.orgCode !== filter.orgCode) return false;
+            return true;
+          }),
+        )
       : request<RiskClue[]>("/risk/clues", {
           query: {
             status: filter.status,
@@ -486,7 +553,7 @@ export const api = {
         }),
   getClue: (id: string): Promise<RiskClue> =>
     useMock()
-      ? delay({} as RiskClue)
+      ? delay(mock.riskClues.find((c) => c.id === id) ?? ({} as RiskClue))
       : request<RiskClue>(`/risk/clues/${encodeURIComponent(id)}`),
   dispatchClue: (id: string): Promise<{ clueId: string; orderId: string; owner: string | null }> =>
     useMock()
@@ -507,17 +574,25 @@ export const api = {
         }),
   closeClue: (id: string): Promise<{ clueId: string; orderId: string | null }> =>
     useMock()
-      ? delay({ clueId: id, orderId: null })
+      ? delay({ clueId: id, orderId: `WO-${Date.now()}` })
       : request<{ clueId: string; orderId: string | null }>(
           `/risk/clues/${encodeURIComponent(id)}/close`,
           { method: "POST" },
         ),
   listDisposals: (clueId: string): Promise<RiskDisposal[]> =>
     useMock()
-      ? delay([])
+      ? delay([
+          { id: 1, clueId, step: "detect", handler: "system", comment: "模型命中自动生成", createdAt: "2026-07-16 09:18:00" },
+          { id: 2, clueId, step: "dispatch", handler: "system", comment: "红线自动派单", createdAt: "2026-07-16 09:18:05" },
+        ] as RiskDisposal[])
       : request<RiskDisposal[]>(`/risk/clues/${encodeURIComponent(clueId)}/disposals`),
   myTodos: (): Promise<unknown[]> =>
-    useMock() ? delay([]) : request<unknown[]>("/risk/my-todos"),
+    useMock()
+      ? delay([
+          { id: "todo-1", clueId: "RC20260715-008", title: "融资性贸易线索 · 待认领", status: "pending", riskLevel: "red" },
+          { id: "todo-2", clueId: "RC20260715-009", title: "超股比担保线索 · 待认领", status: "pending", riskLevel: "yellow" },
+        ])
+      : request<unknown[]>("/risk/my-todos"),
   claimTodo: (todoId: string): Promise<{ ok: boolean }> =>
     useMock()
       ? delay({ ok: true })
@@ -538,19 +613,60 @@ export const api = {
     id: string,
   ): Promise<PenetrationResult> =>
     useMock()
-      ? delay({ layer, ids: [] })
+      ? delay({
+          layer,
+          ids:
+            layer === "ads"
+              ? ["dws-payment-flow-block-1"]
+              : layer === "dws"
+                ? ["dwd-payment-flow-detail-1", "dwd-payment-flow-detail-2"]
+                : layer === "dwd"
+                  ? ["ods-payment-flow-doc-1"]
+                  : [id],
+          details:
+            layer === "ods"
+              ? [
+                  {
+                    docId: id,
+                    stream: "payment_flow",
+                    record: { voucherNo: "V20260716001", amount: 8600000, payee: "Everwin Holdings" },
+                  },
+                ]
+              : undefined,
+        })
       : request<PenetrationResult>(`/penetration/${layer}/${encodeURIComponent(id)}`),
   getLineage: (sceneId?: string): Promise<LineageGraph> =>
     useMock()
-      ? delay({ nodes: [], edges: [] })
+      ? delay({
+          nodes: [
+            { id: "ads-dup-pay", label: "ADS 重复支付指标", layer: "ads" },
+            { id: "dws-payment-block", label: "DWS 支付流水板块", layer: "dws" },
+            { id: "dwd-payment-detail", label: "DWD 支付明细", layer: "dwd" },
+            { id: "ods-voucher", label: "ODS 原始凭证", layer: "ods" },
+          ],
+          edges: [
+            { source: "ads-dup-pay", target: "dws-payment-block", label: "aggregates" },
+            { source: "dws-payment-block", target: "dwd-payment-detail", label: "contains" },
+            { source: "dwd-payment-detail", target: "ods-voucher", label: "contains" },
+          ],
+        })
       : request<LineageGraph>("/penetration/lineage", { query: { sceneId } }),
   listLinkageRules: (sceneId?: string): Promise<LinkageRule[]> =>
     useMock()
-      ? delay([])
+      ? delay(mock.linkageRules.filter((r) => !sceneId || r.sceneId === sceneId))
       : request<LinkageRule[]>("/linkage/rules", { query: { sceneId } }),
   executeLinkageRule: (id: string, entryEntity: string): Promise<unknown> =>
     useMock()
-      ? delay({ chain: [] })
+      ? delay({
+          rule: mock.linkageRules.find((r) => r.id === id),
+          entryEntity,
+          chain: [
+            { layer: "ads", id: entryEntity, ts: "2026-07-16 09:18:00" },
+            { layer: "dws", id: "dws-payment-block", ts: "2026-07-16 09:18:01" },
+            { layer: "dwd", id: "dwd-payment-detail", ts: "2026-07-16 09:18:02" },
+            { layer: "ods", id: "ods-voucher-001", ts: "2026-07-16 09:18:03" },
+          ],
+        })
       : request<unknown>(`/linkage/rules/${encodeURIComponent(id)}/execute`, {
           method: "POST",
           body: { entryEntity },
@@ -559,15 +675,22 @@ export const api = {
   /* ============ V2：AI 智能体 ============ */
   listAgents: (): Promise<Agent[]> =>
     useMock()
-      ? delay([])
+      ? delay(mock.agents)
       : request<{ list: Agent[] }>("/ai/agents").then((r) => r.list),
   getAgent: (id: string): Promise<Agent> =>
     useMock()
-      ? delay({} as Agent)
+      ? delay(mock.agents.find((a) => a.id === id) ?? ({} as Agent))
       : request<Agent>(`/ai/agents/${encodeURIComponent(id)}`),
   invokeAgent: (id: string, input: Record<string, unknown>): Promise<AgentInvokeResponse> =>
     useMock()
-      ? delay({ configured: false, message: "mock 模式：未对接 AI" })
+      ? delay({
+          configured: false,
+          message: "mock 模式：未对接 LLM，返回占位响应",
+          agentId: id,
+          ...(id === "text-compare" ? { similarity: 0.85, diff: [] } : {}),
+          ...(id === "info-extract" ? { fields: {}, confidence: 0 } : {}),
+          ...(id === "report-generate" ? { report: "## 风险处置报告（占位）\n\n本报告由 mock 模式生成。", clueCount: 0 } : {}),
+        })
       : request<AgentInvokeResponse>(`/ai/agents/${encodeURIComponent(id)}/invoke`, {
           method: "POST",
           body: input,
@@ -577,7 +700,17 @@ export const api = {
     input: Record<string, unknown>,
   ): Promise<OrchestrateResult> =>
     useMock()
-      ? delay({ workflow, status: "success", nodes: [], totalLatencyMs: 0 })
+      ? delay({
+          workflow,
+          status: "success",
+          nodes: [
+            { node: "info-extract", status: "success", output: { fields: {} }, latencyMs: 12 },
+            { node: "graph-build", status: "success", output: { graphId: "g-mock" }, latencyMs: 8 },
+            { node: "report-generate", status: "success", output: { report: "## 风险处置报告（占位）" }, latencyMs: 15 },
+          ],
+          finalOutput: { report: "## 风险处置报告（占位）\n\nmock 模式：未对接 LLM" },
+          totalLatencyMs: 35,
+        } as OrchestrateResult)
       : request<OrchestrateResult>("/ai/agents/orchestrate", {
           method: "POST",
           body: { workflow, input },
