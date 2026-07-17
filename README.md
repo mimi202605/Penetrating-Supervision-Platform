@@ -1,4 +1,4 @@
-# 集团穿透式监管平台
+# 中央企业穿透式监管平台
 
 > 一平台三中心 · 集团穿透式监管的工程化落地
 > 演示站点：<https://mimi202605.github.io/Penetrating-Supervision-Platform/>
