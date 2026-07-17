@@ -1,7 +1,9 @@
 // 调度指挥中心 - 工单状态机（Flowable 等价）
-// 节点顺序：verify → rectify → review → archive
+// V2 七态：detect → dispatch → receive → dispose → approve → close → archive
+// V1 向后兼容：verify → rectify → review → archive 通过 NODE_ALIASES 映射到 V2 等价节点
 // advanceWorkOrder 校验当前节点并推进，更新 progress / current_node / status / updated_at
-// 到达 archive 时同步将关联风险预警置为 resolved，并记审计 + emit 'workorder.advanced'
+// 到达 archive 时同步将关联风险预警置为 resolved + 关联 risk_clues 置为 closed，
+// 并记审计 + emit 'workorder.advanced' / 'risk.clue.closed'
 import { execute, queryAll, queryOne, transaction } from "../../db/index.js";
 import { camelize } from "../../utils/case.js";
 import { recordAudit } from "../platform/audit.js";
@@ -9,15 +11,34 @@ import { eventBus } from "../platform/eventbus.js";
 import { incWorkorderAdvance } from "../../health.js";
 import { logger } from "../../utils/logger.js";
 
-/** 工单节点顺序 */
-export const NODE_ORDER = ["verify", "rectify", "review", "archive"] as const;
+/** V2 七态节点顺序 */
+export const NODE_ORDER = ["detect", "dispatch", "receive", "dispose", "approve", "close", "archive"] as const;
 export type WorkOrderNode = (typeof NODE_ORDER)[number];
+
+/** V1 节点 → V2 节点别名映射（向后兼容） */
+export const NODE_ALIASES: Record<string, WorkOrderNode> = {
+  // V1 原生
+  verify: "receive",
+  rectify: "dispose",
+  review: "approve",
+  // V2 原生（自映射）
+  detect: "detect",
+  dispatch: "dispatch",
+  receive: "receive",
+  dispose: "dispose",
+  approve: "approve",
+  close: "close",
+  archive: "archive",
+};
 
 /** 各节点对应进度（0-100） */
 export const PROGRESS_BY_NODE: Record<WorkOrderNode, number> = {
-  verify: 20,
-  rectify: 50,
-  review: 80,
+  detect: 5,
+  dispatch: 15,
+  receive: 30,
+  dispose: 50,
+  approve: 75,
+  close: 90,
   archive: 100,
 };
 
@@ -56,17 +77,23 @@ function nowFormatted(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** 校验是否合法节点 */
+/** 校验是否合法节点（含 V1 别名） */
 function isNode(n: string): n is WorkOrderNode {
-  return (NODE_ORDER as readonly string[]).includes(n);
+  return n in NODE_ALIASES;
+}
+
+/** 将任意节点名归一为 V2 标准节点名 */
+function normalizeNode(n: string): WorkOrderNode {
+  return NODE_ALIASES[n] ?? "archive";
 }
 
 /**
  * 推进工单至下一节点
- * - 校验当前节点是否合法、是否已 archive
+ * - 校验当前节点是否合法（含 V1 别名 verify/rectify/review）、是否已 archive
+ * - V1 别名先归一为 V2 节点（verify→receive, rectify→dispose, review→approve）
  * - 更新 current_node / progress / status / updated_at
- * - 到达 archive 且有关联 risk_warning_id 时，同步将风险预警置为 resolved
- * - 记审计 + 指标 +1 + emit 'workorder.advanced'
+ * - 到达 archive 时：① 关联 risk_warning_id 的 risk_warnings 置 resolved ② 关联 risk_clues 置 closed
+ * - 记审计 + 指标 +1 + emit 'workorder.advanced'（archive 时另 emit 'risk.clue.closed'）
  */
 export function advanceWorkOrder(
   orderId: string,
@@ -83,19 +110,20 @@ export function advanceWorkOrder(
   if (!isNode(row.current_node)) {
     return { ok: false, message: `当前节点非法：${row.current_node}` };
   }
-  if (row.current_node === "archive") {
+  const currentNormalized = normalizeNode(row.current_node);
+  if (currentNormalized === "archive") {
     return { ok: false, message: "工单已归档，无法继续推进" };
   }
 
-  const fromNode = row.current_node;
+  const fromNode = currentNormalized;
   const idx = NODE_ORDER.indexOf(fromNode);
   const toNode = NODE_ORDER[idx + 1];
   const progress = PROGRESS_BY_NODE[toNode];
   const status = toNode === "archive" ? "archived" : "processing";
   const now = nowFormatted();
 
-  // 事务包裹 work_orders 推进 + risk_warnings 联动，避免一半提交一半失败导致
-  // 工单已 archive 但风险预警永远停在 processing 的不可恢复不一致
+  // 事务包裹 work_orders 推进 + risk_warnings/risk_clues 联动，避免一半提交一半失败导致
+  // 工单已 archive 但风险预警/线索永远停在 processing 的不可恢复不一致
   transaction(() => {
     execute(
       "UPDATE work_orders SET current_node = ?, progress = ?, status = ?, updated_at = ? WHERE id = ?",
@@ -107,6 +135,14 @@ export function advanceWorkOrder(
       execute(
         "UPDATE risk_warnings SET status = 'resolved' WHERE id = ?",
         [row.risk_warning_id],
+      );
+    }
+
+    // 到达归档：同步将关联风险线索置为 closed
+    if (toNode === "archive") {
+      execute(
+        "UPDATE risk_clues SET status = 'closed' WHERE work_order_id = ? AND status != 'closed'",
+        [orderId],
       );
     }
   });
@@ -146,6 +182,17 @@ export function advanceWorkOrder(
     riskWarningId: row.risk_warning_id,
     result: result ?? null,
   });
+
+  // 归档时触发风险线索关闭事件（规则反哺）
+  if (toNode === "archive") {
+    const clue = queryOne<{ id: string }>(
+      "SELECT id FROM risk_clues WHERE work_order_id = ?",
+      [orderId],
+    );
+    if (clue) {
+      eventBus.emit("risk.clue.closed", { clueId: clue.id, orderId });
+    }
+  }
 
   logger.info({ orderId, fromNode, toNode, progress }, "工单推进");
 

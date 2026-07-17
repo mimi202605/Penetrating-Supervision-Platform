@@ -5,6 +5,7 @@ import { registerCollectionSources } from "./sources.js";
 import { registerCollectionTasks } from "./tasks.js";
 import { registerCollectionOverview } from "./overview.js";
 import { registerCollectionTrend } from "./trend.js";
+import { registerTransformRoutes } from "./transform/routes.js";
 
 /** 汇总注册数据采集中心所有路由 */
 export const registerCollectionRoutes: FastifyPluginAsync = async (app, _opts) => {
@@ -12,4 +13,5 @@ export const registerCollectionRoutes: FastifyPluginAsync = async (app, _opts) =
   await app.register(registerCollectionTasks);
   await app.register(registerCollectionOverview);
   await app.register(registerCollectionTrend);
+  await app.register(registerTransformRoutes);
 };

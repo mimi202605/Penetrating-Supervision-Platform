@@ -59,7 +59,7 @@ export default function TopNav() {
             className="text-caption"
             style={{ color: "var(--color-on-surface-variant)", letterSpacing: "0.06em" }}
           >
-            新兴际华
+            中央企业
           </span>
           <span
             className="text-h3 font-medium"

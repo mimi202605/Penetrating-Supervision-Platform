@@ -150,14 +150,14 @@ export const riskWarnings: RiskWarning[] = [
     title: "海外子公司违规关联交易",
     domain: "境外单位领域",
     level: "high",
-    subject: "新兴际华国际",
+    subject: "中央企业国际",
     rule: "关联交易规则R-108",
     triggeredAt: "2026-07-16 08:45",
     status: "processing",
     clue: "境外子公司与高管直系亲属控股企业发生 1,200 万美元交易，未履行关联交易审批程序。",
     relatedOrderId: "WO20260715-008",
     raw: [
-      { label: "交易主体", value: "新兴际华国际（香港）有限公司" },
+      { label: "交易主体", value: "中央企业国际（香港）有限公司" },
       { label: "对手方", value: "Everwin Holdings Ltd（关联自然人控股）" },
       { label: "交易金额", value: "1,200 万美元" },
       { label: "审批状态", value: "未走关联交易审批流" },
@@ -350,7 +350,7 @@ export const collectionTrend: TrendPoint[] = (() => {
 /* ===================== 关系图谱 ===================== */
 
 export const graphNodes: GraphNode[] = [
-  { id: "org-1", label: "新兴际华集团", type: "org", meta: "集团总部" },
+  { id: "org-1", label: "中央企业集团", type: "org", meta: "集团总部" },
   { id: "org-2", label: "新兴铸管股份", type: "org", meta: "二级单位" },
   { id: "org-3", label: "际华投资公司", type: "org", meta: "二级单位" },
   { id: "acc-1", label: "新兴铸管基本户", type: "account", meta: "6228****1234" },
@@ -441,7 +441,7 @@ export const riskHeatmap: { area: string; high: number; medium: number; low: num
 
 export const penetrationTree = {
   id: "group",
-  name: "新兴际华集团",
+  name: "中央企业集团",
   type: "集团总部",
   level: 1,
   metrics: { assets: "2,860 亿", revenue: "1,820 亿", risk: 86 },

@@ -10,6 +10,8 @@ import { registerMonitoringRoutes } from "./modules/monitoring/routes.js";
 import { registerAIRoutes } from "./modules/ai/routes.js";
 import { registerCollectionRoutes } from "./modules/collection/routes.js";
 import { registerDispatchRoutes } from "./modules/dispatch/routes.js";
+import { registerRegulatoryRoutes } from "./modules/regulatory/routes.js";
+import { registerRiskRoutes } from "./modules/risk/routes.js";
 import { registerSystemRoutes } from "./modules/system/routes.js";
 import { loadEnabledPolicies } from "./modules/ai/sanitizer-policies.js";
 import { logger } from "./utils/logger.js";
@@ -53,6 +55,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       scope.register(registerMonitoringRoutes);
       // 调度指挥中心（Task 6）
       scope.register(registerDispatchRoutes);
+      // 监管场景与模型 registry（V2 Task 12）
+      scope.register(registerRegulatoryRoutes);
+      // 风险闭环运营（V2 Task 14）
+      scope.register(registerRiskRoutes);
       // 人工智能与数据脱敏（Task 10）
       scope.register(registerAIRoutes);
       // 系统模块：审计日志 + 系统设置（Task 8）

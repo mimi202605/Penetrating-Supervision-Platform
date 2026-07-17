@@ -271,3 +271,323 @@ CREATE TABLE IF NOT EXISTS ai_call_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_aicall_user ON ai_call_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_aicall_ep   ON ai_call_logs(endpoint);
+
+-- ============================================================
+-- V2 扩展：数据源管理与采集任务系统
+-- change-id: collection-system-v2
+-- 说明：所有 ALTER TABLE 用幂等方式处理已存在列（应用层 db/index.ts 预检）；
+--       CREATE TABLE IF NOT EXISTS 保证可重复执行。
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- V2 扩展：data_sources 增加连接器类型、健康度、场景关联
+-- ------------------------------------------------------------
+ALTER TABLE data_sources ADD COLUMN connector_type TEXT;        -- kingdee-eas-openapi / sap-bapi / ...
+ALTER TABLE data_sources ADD COLUMN endpoint TEXT;              -- 主机/URL
+ALTER TABLE data_sources ADD COLUMN auth_type TEXT;             -- basic/token/oauth2/cert
+ALTER TABLE data_sources ADD COLUMN health_score INTEGER DEFAULT 100;
+ALTER TABLE data_sources ADD COLUMN last_check_at TEXT;
+ALTER TABLE data_sources ADD COLUMN capabilities TEXT;          -- JSON 数组
+ALTER TABLE data_sources ADD COLUMN schema_catalog TEXT;        -- JSON：discover 结果
+ALTER TABLE data_sources ADD COLUMN scene_id TEXT;              -- 关联监管场景
+ALTER TABLE data_sources ADD COLUMN config_json TEXT;           -- 非敏感配置 JSON（endpoint/username/dcCode 等非凭据字段）
+
+-- ------------------------------------------------------------
+-- V2 扩展：collection_tasks 增加 source/sink/transform/调度策略
+-- ------------------------------------------------------------
+ALTER TABLE collection_tasks ADD COLUMN source_id TEXT;
+ALTER TABLE collection_tasks ADD COLUMN sink_type TEXT;
+ALTER TABLE collection_tasks ADD COLUMN sink_target TEXT;
+ALTER TABLE collection_tasks ADD COLUMN write_mode TEXT;         -- overwrite/append/upsert
+ALTER TABLE collection_tasks ADD COLUMN transform_pipeline TEXT; -- JSON 步骤数组
+ALTER TABLE collection_tasks ADD COLUMN field_mapping TEXT;      -- JSON
+ALTER TABLE collection_tasks ADD COLUMN filter_condition TEXT;
+ALTER TABLE collection_tasks ADD COLUMN concurrency INTEGER DEFAULT 1;
+ALTER TABLE collection_tasks ADD COLUMN retry_max INTEGER DEFAULT 3;
+ALTER TABLE collection_tasks ADD COLUMN retry_interval_sec INTEGER DEFAULT 60;
+ALTER TABLE collection_tasks ADD COLUMN timeout_sec INTEGER;
+ALTER TABLE collection_tasks ADD COLUMN priority INTEGER DEFAULT 5;
+ALTER TABLE collection_tasks ADD COLUMN depends_on TEXT;         -- JSON：上游任务 ID
+ALTER TABLE collection_tasks ADD COLUMN checkpoint_state TEXT;   -- JSON：断点
+ALTER TABLE collection_tasks ADD COLUMN enabled INTEGER DEFAULT 1;
+ALTER TABLE collection_tasks ADD COLUMN scene_id TEXT;
+ALTER TABLE collection_tasks ADD COLUMN model_id TEXT;
+
+-- ------------------------------------------------------------
+-- V2 新增：连接器目录（可热插拔，前端按此渲染）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS connectors (
+  type            TEXT PRIMARY KEY,
+  display_name    TEXT NOT NULL,
+  category        TEXT NOT NULL,         -- erp/db/file/mq/saas
+  capabilities    TEXT,                  -- JSON 数组
+  auth            TEXT,                  -- basic/token/oauth2/cert/none
+  spec_json       TEXT NOT NULL,         -- JsonSchema 配置规范
+  secret_fields   TEXT,                  -- JSON 数组
+  enabled         INTEGER NOT NULL DEFAULT 1,
+  version         TEXT,
+  created_at      TEXT DEFAULT (datetime('now'))
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：数据源凭据（密钥入此表，加密存储，与登记表解耦）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS data_source_secrets (
+  source_id      TEXT PRIMARY KEY,
+  secret_blob    BLOB NOT NULL,          -- AES-256-GCM 密文（IV 前置）
+  secret_key_ref TEXT,                   -- 环境变量名
+  updated_at     TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (source_id) REFERENCES data_sources(id) ON DELETE CASCADE
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：数据源健康历史（用于趋势图）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS data_source_health (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id   TEXT NOT NULL,
+  checked_at  TEXT NOT NULL,
+  latency_ms  INTEGER,
+  status      TEXT,                       -- online/offline/degraded
+  error       TEXT,
+  FOREIGN KEY (source_id) REFERENCES data_sources(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_dsh_source ON data_source_health(source_id, checked_at);
+
+-- ------------------------------------------------------------
+-- V2 新增：任务执行历史（Job/Task 级粒度）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS collection_task_runs (
+  id            TEXT PRIMARY KEY,         -- run-<taskId>-<ts>
+  task_id       TEXT NOT NULL,
+  attempt       INTEGER DEFAULT 1,
+  status        TEXT NOT NULL,            -- running/success/failed/killed
+  started_at    TEXT NOT NULL,
+  finished_at   TEXT,
+  records_read  INTEGER DEFAULT 0,
+  records_write INTEGER DEFAULT 0,
+  records_dirty INTEGER DEFAULT 0,
+  bytes_read    INTEGER DEFAULT 0,
+  error         TEXT,
+  checkpoint    TEXT,                     -- 本次结束的断点状态
+  FOREIGN KEY (task_id) REFERENCES collection_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_ctr_task ON collection_task_runs(task_id, started_at);
+
+-- ------------------------------------------------------------
+-- V2 新增：断点（CDC/增量任务专用，独立于任务以支持多实例）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS collection_checkpoints (
+  task_id    TEXT NOT NULL,
+  shard_id   TEXT NOT NULL,               -- 分片标识
+  state      TEXT NOT NULL,               -- JSON
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (task_id, shard_id)
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：脏数据隔离表（DataX errorLimit 等价）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS dirty_records (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id    TEXT NOT NULL,
+  run_id     TEXT NOT NULL,
+  step_id    TEXT,                        -- 出错的 transform 步骤
+  raw_json   TEXT,                        -- 原始记录
+  error      TEXT,                        -- 错误信息
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (task_id) REFERENCES collection_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_dirty_task ON dirty_records(task_id, created_at);
+
+-- ------------------------------------------------------------
+-- V2 新增：对账（InLong Audit 等价）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS collection_audit (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id       TEXT NOT NULL,
+  audit_point   TEXT NOT NULL,            -- reader_in/reader_out/writer_in/writer_out
+  log_ts        TEXT NOT NULL,            -- 分钟级时间戳
+  count         INTEGER DEFAULT 0,
+  bytes         INTEGER DEFAULT 0,
+  delay_ms      INTEGER DEFAULT 0,
+  FOREIGN KEY (task_id) REFERENCES collection_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_audit_task ON collection_audit(task_id, log_ts, audit_point);
+
+-- ------------------------------------------------------------
+-- V2 新增：血缘（四级穿透溯源）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS data_lineage (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id      TEXT NOT NULL,
+  source_id    TEXT NOT NULL,
+  source_table TEXT,
+  sink_table   TEXT NOT NULL,
+  field_map    TEXT,                      -- JSON：字段映射
+  layer        TEXT,                      -- ods/dwd/dws/ads
+  scene_id     TEXT,
+  doc_id       TEXT,                      -- 原始单据 ID
+  created_at   TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_lineage_penetrate ON data_lineage(scene_id, layer);
+CREATE INDEX IF NOT EXISTS idx_lineage_task ON data_lineage(task_id);
+
+-- ------------------------------------------------------------
+-- V2 新增：监管场景目录（11+4 场景）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS regulatory_scenes (
+  id            TEXT PRIMARY KEY,         -- scene-investment-overdebt
+  domain        TEXT NOT NULL,            -- investment/property/finance/accounting/salary/finance-risk/military/overseas/procurement/contract
+  issue_code    TEXT,                     -- over_debt/irrelevant_diversification/salary_anomaly/...
+  name          TEXT NOT NULL,
+  description   TEXT,
+  data_sources  TEXT,                     -- JSON：连接器 type 数组
+  indicators    TEXT,                     -- JSON
+  threshold     TEXT,                     -- JSON
+  freq          TEXT,                     -- realtime/hourly/daily/monthly
+  model_id      TEXT,
+  enabled       INTEGER DEFAULT 1,
+  created_at    TEXT DEFAULT (datetime('now'))
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：监管模型 registry（198 模型）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS regulatory_models (
+  id              TEXT PRIMARY KEY,       -- m-overdebt-001
+  scene_id        TEXT NOT NULL,
+  domain          TEXT NOT NULL,
+  category        TEXT,                   -- rule/ml/agent
+  name            TEXT NOT NULL,
+  description     TEXT,
+  rule_type       TEXT,                   -- enterprise/manager/employee/professional-manager
+  indicator_count INTEGER,
+  rule_dsl        TEXT,                   -- json-rules-engine DSL
+  threshold_json  TEXT,
+  schedule_cron   TEXT,
+  status          TEXT,                   -- draft/testing/online/offline
+  version         TEXT,
+  owner_dept      TEXT,
+  effectiveness   TEXT,
+  created_at      TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (scene_id) REFERENCES regulatory_scenes(id)
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：模型指标
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS model_indicators (
+  id          TEXT PRIMARY KEY,
+  model_id    TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  expr        TEXT,                       -- 指标公式 SQL/DSL
+  data_source TEXT,                       -- 数据来源
+  unit        TEXT,
+  FOREIGN KEY (model_id) REFERENCES regulatory_models(id)
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：采集任务模板（开箱即用）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS collection_task_templates (
+  id            TEXT PRIMARY KEY,
+  scene_id      TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  connector_type TEXT NOT NULL,
+  stream        TEXT,
+  schedule_cron TEXT,
+  transform_pipeline TEXT,                -- JSON
+  field_mapping TEXT,                     -- JSON
+  FOREIGN KEY (scene_id) REFERENCES regulatory_scenes(id)
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：风险线索池（集中式线索池，T+5 销警）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS risk_clues (
+  id            TEXT PRIMARY KEY,
+  scene_id      TEXT NOT NULL,
+  model_id      TEXT NOT NULL,
+  entity_type   TEXT,                     -- person/org/project/supplier/contract/payment
+  entity_id     TEXT,
+  risk_level    TEXT,                     -- yellow/orange/red
+  risk_value    TEXT,
+  description   TEXT,
+  status        TEXT DEFAULT 'pending',   -- pending/confirmed/dispatched/disposed/closed/transferred
+  detected_at   TEXT NOT NULL,
+  due_at        TEXT,                     -- T+5 工作日
+  assigned_to   TEXT,
+  org_code      TEXT,
+  evidence_json TEXT,
+  work_order_id TEXT,                     -- 关联 dispatch 工单
+  FOREIGN KEY (scene_id) REFERENCES regulatory_scenes(id),
+  FOREIGN KEY (model_id) REFERENCES regulatory_models(id)
+);
+CREATE INDEX IF NOT EXISTS idx_clue_status ON risk_clues(status, due_at);
+CREATE INDEX IF NOT EXISTS idx_clue_scene ON risk_clues(scene_id, risk_level);
+
+-- ------------------------------------------------------------
+-- V2 新增：风险处置记录
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS risk_disposals (
+  id            TEXT PRIMARY KEY,
+  clue_id       TEXT NOT NULL,
+  step          TEXT,                     -- receive/dispose/approve/close
+  handler       TEXT NOT NULL,
+  role_code     TEXT,
+  comment       TEXT,
+  attachment    TEXT,
+  created_at    TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (clue_id) REFERENCES risk_clues(id)
+);
+CREATE INDEX IF NOT EXISTS idx_disp_clue ON risk_disposals(clue_id, created_at);
+
+-- ------------------------------------------------------------
+-- V2 新增：联查规则（预置 60+）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS linkage_rules (
+  id           TEXT PRIMARY KEY,
+  scene_id     TEXT NOT NULL,
+  source_system TEXT,
+  entry_point  TEXT,
+  drill_path   TEXT,                      -- JSON
+  target_layer TEXT,
+  FOREIGN KEY (scene_id) REFERENCES regulatory_scenes(id)
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：监管岗位目录（30 集团岗 + 45 直属岗）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS regulatory_positions (
+  code          TEXT PRIMARY KEY,
+  layer         TEXT NOT NULL,            -- group/subsidiary
+  category      TEXT NOT NULL,
+  role_type     TEXT,                     -- handler/approver/receiver/disposer
+  name          TEXT NOT NULL,
+  data_scope    TEXT
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：模型级数据授权
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS position_model_grant (
+  position_code TEXT NOT NULL,
+  model_id      TEXT NOT NULL,
+  permission    TEXT,                     -- view/dispose/approve
+  PRIMARY KEY (position_code, model_id)
+);
+
+-- ------------------------------------------------------------
+-- V2 新增：ODS 落地表（sink.ts 写入）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ods_generic (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id      TEXT NOT NULL,
+  run_id       TEXT NOT NULL,
+  stream       TEXT NOT NULL,             -- 来源 stream
+  record_json  TEXT NOT NULL,             -- 原始记录 JSON
+  ingested_at  TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ods_stream ON ods_generic(stream, ingested_at);
+CREATE INDEX IF NOT EXISTS idx_ods_task ON ods_generic(task_id, run_id);
