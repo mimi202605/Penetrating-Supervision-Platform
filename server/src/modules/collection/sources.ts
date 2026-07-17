@@ -13,6 +13,7 @@ import {
   listConnectorsByCategory,
 } from "./connectors/index.js";
 import type { ConnectorSpec, StreamCatalog, TestResult } from "./connectors/index.js";
+import { setSourceHealthScore } from "../../health.js";
 
 // 应用启动时注册连接器
 registerAllConnectors();
@@ -394,6 +395,7 @@ export const registerCollectionSources: FastifyPluginAsync = async (app, _opts) 
           "UPDATE data_sources SET health_score = ?, last_check_at = ? WHERE id = ?",
           [healthScore, checkedAt, id],
         );
+        setSourceHealthScore(id, healthScore);
         recordAudit({
           userId: userIdOf(request),
           action: "test",
@@ -412,6 +414,7 @@ export const registerCollectionSources: FastifyPluginAsync = async (app, _opts) 
           "UPDATE data_sources SET health_score = 0, last_check_at = ? WHERE id = ?",
           [checkedAt, id],
         );
+        setSourceHealthScore(id, 0);
         reply.send({ status: "offline", latencyMs: Date.now() - t0, error: (err as Error).message });
       }
     },
@@ -510,6 +513,7 @@ export const registerCollectionSources: FastifyPluginAsync = async (app, _opts) 
           "UPDATE data_sources SET health_score = ?, last_check_at = ? WHERE id = ?",
           [healthScore, checkedAt, id],
         );
+        setSourceHealthScore(id, healthScore);
         reply.send(result);
       } catch (err) {
         reply.send({ status: "offline", latencyMs: Date.now() - t0, error: (err as Error).message });

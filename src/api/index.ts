@@ -26,6 +26,24 @@ import type {
   AIQueryResponse,
   AIHealth,
   DashboardResponse,
+  Connector,
+  StreamCatalog,
+  TransformType,
+  TransformPipeline,
+  CollectionTaskRun,
+  Checkpoint,
+  DirtyRecord,
+  AuditPoint,
+  RegulatoryScene,
+  RegulatoryModel,
+  RiskClue,
+  RiskDisposal,
+  LinkageRule,
+  Agent,
+  PenetrationResult,
+  LineageGraph,
+  OrchestrateResult,
+  AgentInvokeResponse,
 } from "@/api/types";
 
 export interface RiskFilter {
@@ -350,4 +368,218 @@ export const api = {
     useMock()
       ? delay({ configured: false } as AIHealth)
       : request<AIHealth>("/ai/health"),
+
+  /* ============ V2：连接器目录与数据源 ============ */
+  listConnectors: (): Promise<Connector[]> =>
+    useMock()
+      ? delay([])
+      : request<{ list: Connector[] }>("/collection/connectors").then((r) => r.list),
+  getConnector: (type: string): Promise<Connector> =>
+    useMock()
+      ? delay({ type, name: type, category: "db", capabilities: [], implemented: false } as Connector)
+      : request<Connector>(`/collection/connectors/${encodeURIComponent(type)}`),
+  testSource: (config: Record<string, unknown>): Promise<{ status: string; latencyMs: number; error?: string }> =>
+    useMock()
+      ? delay({ status: "online", latencyMs: 10 })
+      : request<{ status: string; latencyMs: number; error?: string }>("/collection/sources/test", {
+          method: "POST",
+          body: config,
+        }),
+  testSourceById: (id: string): Promise<{ status: string; latencyMs: number; error?: string }> =>
+    useMock()
+      ? delay({ status: "online", latencyMs: 10 })
+      : request<{ status: string; latencyMs: number; error?: string }>(
+          `/collection/sources/${encodeURIComponent(id)}/test`,
+          { method: "POST" },
+        ),
+  discoverSource: (id: string): Promise<StreamCatalog> =>
+    useMock()
+      ? delay({ streams: [] })
+      : request<StreamCatalog>(`/collection/sources/${encodeURIComponent(id)}/discover`, {
+          method: "POST",
+        }),
+  getSourceHealthHistory: (
+    id: string,
+  ): Promise<{ checkedAt: string; latencyMs: number; status: string; error?: string }[]> =>
+    useMock()
+      ? delay([])
+      : request<{ checkedAt: string; latencyMs: number; status: string; error?: string }[]>(
+          `/collection/sources/${encodeURIComponent(id)}/health-history`,
+        ),
+
+  /* ============ V2：Transform 管道 ============ */
+  listTransformTypes: (): Promise<TransformType[]> =>
+    useMock() ? delay([]) : request<TransformType[]>("/collection/transforms/types"),
+  previewTransform: (
+    sample: Record<string, unknown>,
+    pipeline: TransformPipeline,
+  ): Promise<unknown> =>
+    useMock()
+      ? delay({ output: sample })
+      : request<unknown>("/collection/transforms/preview", {
+          method: "POST",
+          body: { sample, pipeline },
+        }),
+
+  /* ============ V2：采集任务运行时 ============ */
+  triggerTask: (id: string): Promise<{ runId: string; status: string }> =>
+    useMock()
+      ? delay({ runId: `run-${Date.now()}`, status: "accepted" })
+      : request<{ runId: string; status: string }>(
+          `/collection/tasks/${encodeURIComponent(id)}/trigger`,
+          { method: "POST", body: {} },
+        ),
+  listRuns: (taskId: string): Promise<CollectionTaskRun[]> =>
+    useMock()
+      ? delay([])
+      : request<CollectionTaskRun[]>(`/collection/tasks/${encodeURIComponent(taskId)}/runs`),
+  listCheckpoints: (taskId: string): Promise<Checkpoint[]> =>
+    useMock()
+      ? delay([])
+      : request<Checkpoint[]>(`/collection/tasks/${encodeURIComponent(taskId)}/checkpoints`),
+  listDirtyRecords: (taskId: string, runId?: string): Promise<DirtyRecord[]> =>
+    useMock()
+      ? delay([])
+      : request<DirtyRecord[]>(`/collection/tasks/${encodeURIComponent(taskId)}/dirty`, {
+          query: { runId },
+        }),
+  listTaskAudit: (taskId: string): Promise<AuditPoint[]> =>
+    useMock()
+      ? delay([])
+      : request<AuditPoint[]>(`/collection/tasks/${encodeURIComponent(taskId)}/audit`),
+
+  /* ============ V2：监管场景与模型 ============ */
+  listRegulatoryScenes: (domain?: string): Promise<RegulatoryScene[]> =>
+    useMock()
+      ? delay([])
+      : request<RegulatoryScene[]>("/regulatory/scenes", { query: { domain } }),
+  getRegulatoryModel: (id: string): Promise<RegulatoryModel> =>
+    useMock()
+      ? delay({ id, sceneId: "", domain: "", name: "", status: "online" } as RegulatoryModel)
+      : request<RegulatoryModel>(`/regulatory/models/${encodeURIComponent(id)}`),
+  testModel: (id: string, facts: Record<string, unknown>): Promise<unknown> =>
+    useMock()
+      ? delay({ matched: false, facts })
+      : request<unknown>(`/regulatory/models/${encodeURIComponent(id)}/test`, {
+          method: "POST",
+          body: { facts },
+        }),
+
+  /* ============ V2：风险闭环 ============ */
+  listClues: (filter: {
+    status?: string;
+    riskLevel?: string;
+    sceneId?: string;
+    orgCode?: string;
+    limit?: number;
+  } = {}): Promise<RiskClue[]> =>
+    useMock()
+      ? delay([])
+      : request<RiskClue[]>("/risk/clues", {
+          query: {
+            status: filter.status,
+            riskLevel: filter.riskLevel,
+            sceneId: filter.sceneId,
+            orgCode: filter.orgCode,
+            limit: filter.limit,
+          },
+        }),
+  getClue: (id: string): Promise<RiskClue> =>
+    useMock()
+      ? delay({} as RiskClue)
+      : request<RiskClue>(`/risk/clues/${encodeURIComponent(id)}`),
+  dispatchClue: (id: string): Promise<{ clueId: string; orderId: string; owner: string | null }> =>
+    useMock()
+      ? delay({ clueId: id, orderId: `WO-${Date.now()}`, owner: null })
+      : request<{ clueId: string; orderId: string; owner: string | null }>(
+          `/risk/clues/${encodeURIComponent(id)}/dispatch`,
+          { method: "POST" },
+        ),
+  disposeClue: (
+    id: string,
+    body: { step: string; handler: string; comment?: string; roleCode?: string },
+  ): Promise<RiskDisposal> =>
+    useMock()
+      ? delay({ id: Date.now(), clueId: id, ...body, createdAt: new Date().toISOString() } as RiskDisposal)
+      : request<RiskDisposal>(`/risk/clues/${encodeURIComponent(id)}/dispose`, {
+          method: "POST",
+          body,
+        }),
+  closeClue: (id: string): Promise<{ clueId: string; orderId: string | null }> =>
+    useMock()
+      ? delay({ clueId: id, orderId: null })
+      : request<{ clueId: string; orderId: string | null }>(
+          `/risk/clues/${encodeURIComponent(id)}/close`,
+          { method: "POST" },
+        ),
+  listDisposals: (clueId: string): Promise<RiskDisposal[]> =>
+    useMock()
+      ? delay([])
+      : request<RiskDisposal[]>(`/risk/clues/${encodeURIComponent(clueId)}/disposals`),
+  myTodos: (): Promise<unknown[]> =>
+    useMock() ? delay([]) : request<unknown[]>("/risk/my-todos"),
+  claimTodo: (todoId: string): Promise<{ ok: boolean }> =>
+    useMock()
+      ? delay({ ok: true })
+      : request<{ ok: boolean }>(`/risk/todos/${encodeURIComponent(todoId)}/claim`, {
+          method: "POST",
+        }),
+  completeTodo: (todoId: string, result?: string): Promise<{ ok: boolean }> =>
+    useMock()
+      ? delay({ ok: true })
+      : request<{ ok: boolean }>(`/risk/todos/${encodeURIComponent(todoId)}/complete`, {
+          method: "POST",
+          body: { result },
+        }),
+
+  /* ============ V2：穿透查询与联查 ============ */
+  drillPenetration: (
+    layer: "ads" | "dws" | "dwd" | "ods",
+    id: string,
+  ): Promise<PenetrationResult> =>
+    useMock()
+      ? delay({ layer, ids: [] })
+      : request<PenetrationResult>(`/penetration/${layer}/${encodeURIComponent(id)}`),
+  getLineage: (sceneId?: string): Promise<LineageGraph> =>
+    useMock()
+      ? delay({ nodes: [], edges: [] })
+      : request<LineageGraph>("/penetration/lineage", { query: { sceneId } }),
+  listLinkageRules: (sceneId?: string): Promise<LinkageRule[]> =>
+    useMock()
+      ? delay([])
+      : request<LinkageRule[]>("/linkage/rules", { query: { sceneId } }),
+  executeLinkageRule: (id: string, entryEntity: string): Promise<unknown> =>
+    useMock()
+      ? delay({ chain: [] })
+      : request<unknown>(`/linkage/rules/${encodeURIComponent(id)}/execute`, {
+          method: "POST",
+          body: { entryEntity },
+        }),
+
+  /* ============ V2：AI 智能体 ============ */
+  listAgents: (): Promise<Agent[]> =>
+    useMock()
+      ? delay([])
+      : request<{ list: Agent[] }>("/ai/agents").then((r) => r.list),
+  getAgent: (id: string): Promise<Agent> =>
+    useMock()
+      ? delay({} as Agent)
+      : request<Agent>(`/ai/agents/${encodeURIComponent(id)}`),
+  invokeAgent: (id: string, input: Record<string, unknown>): Promise<AgentInvokeResponse> =>
+    useMock()
+      ? delay({ configured: false, message: "mock 模式：未对接 AI" })
+      : request<AgentInvokeResponse>(`/ai/agents/${encodeURIComponent(id)}/invoke`, {
+          method: "POST",
+          body: input,
+        }),
+  orchestrateAgents: (
+    workflow: string,
+    input: Record<string, unknown>,
+  ): Promise<OrchestrateResult> =>
+    useMock()
+      ? delay({ workflow, status: "success", nodes: [], totalLatencyMs: 0 })
+      : request<OrchestrateResult>("/ai/agents/orchestrate", {
+          method: "POST",
+          body: { workflow, input },
+        }),
 };
