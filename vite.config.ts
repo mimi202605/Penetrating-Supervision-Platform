@@ -4,6 +4,9 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 // https://vite.dev/config/
 export default defineConfig({
+  // GitHub Pages 项目站点部署在 https://<user>.github.io/Penetrating-Supervision-Platform/
+  // 使用相对路径 base，保障资源在任何子路径下均可正确加载
+  base: './',
   build: {
     sourcemap: 'hidden',
   },
