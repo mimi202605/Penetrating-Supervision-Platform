@@ -6,45 +6,47 @@
 
 ## Phase 1：Schema 扩展与配置基座
 
-- [ ] Task 1: schema 扩展与建表幂等
-  - [ ] SubTask 1.1: 在 [schema.sql](file:///workspace/server/src/db/schema.sql) 末尾追加本期全部 `ALTER TABLE data_sources` / `ALTER TABLE collection_tasks` 语句，每条 `ALTER` 用 `/* v2: ignore-duplicate-column */` 注释包裹；`CREATE TABLE IF NOT EXISTS` 新增 13 张表（connectors、data_source_secrets、data_source_health、collection_task_runs、collection_checkpoints、dirty_records、collection_audit、data_lineage、regulatory_scenes、regulatory_models、model_indicators、collection_task_templates、risk_clues、risk_disposals、linkage_rules、regulatory_positions、position_model_grant）
-  - [ ] SubTask 1.2: [db/index.ts](file:///workspace/server/src/db/index.ts) 加载 schema 时对 `ALTER TABLE ADD COLUMN` 做 `PRAGMA table_info` 预检，已存在列跳过；事务包裹 `[P]`
-  - [ ] SubTask 1.3: [config.ts](file:///workspace/server/src/config.ts) 新增 `SOURCE_SECRET_KEY`（默认 `dev-insecure-key-32bytes-change-me!`，长度校验 32 字符）、`SOURCE_SECRET_KEY_REF`（环境变量名，默认 `SOURCE_SECRET_KEY`）
-  - [ ] SubTask 1.4: 新增 `server/src/modules/collection/crypto.ts`：`encryptSecret(obj, keyRef)` / `decryptSecret(blob, keyRef)`，AES-256-GCM，IV 随机 12 字节前置存储；单元测试覆盖加解密往返 `[P]`
+- [x] Task 1: schema 扩展与建表幂等
+  - [x] SubTask 1.1: 在 [schema.sql](file:///workspace/server/src/db/schema.sql) 末尾追加本期全部 `ALTER TABLE data_sources` / `ALTER TABLE collection_tasks` 语句，每条 `ALTER` 用 `/* v2: ignore-duplicate-column */` 注释包裹；`CREATE TABLE IF NOT EXISTS` 新增 13 张表（connectors、data_source_secrets、data_source_health、collection_task_runs、collection_checkpoints、dirty_records、collection_audit、data_lineage、regulatory_scenes、regulatory_models、model_indicators、collection_task_templates、risk_clues、risk_disposals、linkage_rules、regulatory_positions、position_model_grant）
+  - [x] SubTask 1.2: [db/index.ts](file:///workspace/server/src/db/index.ts) 加载 schema 时对 `ALTER TABLE ADD COLUMN` 做 `PRAGMA table_info` 预检，已存在列跳过；事务包裹 `[P]`
+  - [x] SubTask 1.3: [config.ts](file:///workspace/server/src/config.ts) 新增 `SOURCE_SECRET_KEY`（默认 `dev-insecure-key-change-me-32byt`，长度校验 32 字符）、`SOURCE_SECRET_KEY_REF`（环境变量名，默认 `SOURCE_SECRET_KEY`）
+  - [x] SubTask 1.4: 新增 `server/src/modules/collection/crypto.ts`：`encryptSecret(obj, keyRef)` / `decryptSecret(blob, keyRef)`，AES-256-GCM，IV 随机 12 字节前置存储；单元测试覆盖加解密往返 `[P]`
 
-- [ ] Task 2: 依赖安装
-  - [ ] SubTask 2.1: [package.json](file:///workspace/package.json) server 依赖新增 `vm2`（MIT，脚本沙箱）、`alasql`（MIT，SQL Transform）、`papaparse`（MIT，CSV 解析）、`@types/papaparse`；版本固定，校验开源协议 `[P]`
+- [x] Task 2: 依赖安装
+  - [x] SubTask 2.1: [package.json](file:///workspace/package.json) server 依赖新增 `vm2`（MIT，脚本沙箱）、`alasql`（MIT，SQL Transform）、`papaparse`（MIT，CSV 解析）、`@types/papaparse`；版本固定，校验开源协议 `[P]`
 
 ## Phase 2：连接器目录与 6 个连接器
 
-- [ ] Task 3: 连接器 registry
-  - [ ] SubTask 3.1: 新建 `server/src/modules/collection/connectors/registry.ts`：定义 `ConnectorSpec` / `ConnectorInstance` / `StreamCatalog` / `ReadContext` 接口（按 spec 契约）；`REGISTRY: Map<string, ConnectorInstance>`；`getConnector(type)` / `listConnectors()` `[P]`
-  - [ ] SubTask 3.2: 新建 `server/src/modules/collection/connectors/catalog.ts`：预置全部 20 个连接器 spec 元数据（6 个实现 + 14 个占位），spec_json 为合法 JsonSchema `[P]`
-  - [ ] SubTask 3.3: 新建 `server/src/modules/collection/connectors/base.ts`：`NotImplementedConnector` 基类，test/discover/read 抛 `NOT_IMPLEMENTED`，14 个占位连接器继承
+- [x] Task 3: 连接器 registry
+  - [x] SubTask 3.1: 新建 `server/src/modules/collection/connectors/registry.ts`：定义 `ConnectorSpec` / `ConnectorInstance` / `StreamCatalog` / `ReadContext` 接口（按 spec 契约）；`REGISTRY: Map<string, ConnectorInstance>`；`getConnector(type)` / `listConnectors()` `[P]`
+  - [x] SubTask 3.2: 新建 `server/src/modules/collection/connectors/catalog.ts`：预置全部 20 个连接器 spec 元数据（6 个实现 + 14 个占位），spec_json 为合法 JsonSchema `[P]`
+  - [x] SubTask 3.3: 新建 `server/src/modules/collection/connectors/base.ts`：`NotImplementedConnector` 基类，test/discover/read 抛 `NOT_IMPLEMENTED`，14 个占位连接器继承
 
-- [ ] Task 4: 6 个连接器实现
-  - [ ] SubTask 4.1: `connectors/kingdee-eas-openapi.ts`：test 走 `/eas/v2/auth/login`（mock 模式直接返回 token）；discover 返回主数据 streams（customer/supplier/material/voucher）；read 按 `lastModifiedAt` 增量分页 `[P]`
-  - [ ] SubTask 4.2: `connectors/sap-odata.ts`：test 走 `$metadata`；discover 解析 entity set；read 走 `$filter` + `$skiptoken` 分页 `[P]`
-  - [ ] SubTask 4.3: `connectors/jdbc-mysql.ts`：基于 better-sqlite3 模拟（接口对齐 mysql2）；test `SELECT 1`；discover `information_schema`；read 按 PK 范围 split `[P]`
-  - [ ] SubTask 4.4: `connectors/cdc-mysql.ts`：test `SHOW MASTER STATUS`（mock）；read 模拟 binlog 位点 → 按 id 范围增量拉取，checkpoint 记录 `{binlog_file, position, last_pk}` `[P]`
-  - [ ] SubTask 4.5: `connectors/treasury-sys.ts`：REST mock；test `/health`；discover 静态 catalog（payment_flow/account_balance/bill_info/guarantee_info）；read 生成 mock 数据流 `[P]`
-  - [ ] SubTask 4.6: `connectors/file-csv.ts`：基于 papaparse；test `fs.access`；discover 首行解析列；read 流式读取 + split 按行范围
+- [x] Task 4: 6 个连接器实现
+  - [x] SubTask 4.1: `connectors/kingdee-eas-openapi.ts`：test 走 `/eas/v2/auth/login`（mock 模式直接返回 token）；discover 返回主数据 streams（customer/supplier/material/voucher）；read 按 `lastModifiedAt` 增量分页 `[P]`
+  - [x] SubTask 4.2: `connectors/sap-odata.ts`：test 走 `$metadata`；discover 解析 entity set；read 走 `$filter` + `$skiptoken` 分页 `[P]`
+  - [x] SubTask 4.3: `connectors/jdbc-mysql.ts`：基于 better-sqlite3 模拟（接口对齐 mysql2）；test `SELECT 1`；discover `information_schema`；read 按 PK 范围 split `[P]`
+  - [x] SubTask 4.4: `connectors/cdc-mysql.ts`：test `SHOW MASTER STATUS`（mock）；read 模拟 binlog 位点 → 按 id 范围增量拉取，checkpoint 记录 `{binlog_file, position, last_pk}` `[P]`
+  - [x] SubTask 4.5: `connectors/treasury-sys.ts`：REST mock；test `/health`；discover 静态 catalog（payment_flow/account_balance/bill_info/guarantee_info）；read 生成 mock 数据流 `[P]`
+  - [x] SubTask 4.6: `connectors/file-csv.ts`：基于 papaparse；test `fs.access`；discover 首行解析列；read 流式读取 + split 按行范围
 
 ## Phase 3：数据源 API 升级
 
-- [ ] Task 5: sources.ts 升级
-  - [ ] SubTask 5.1: [sources.ts](file:///workspace/server/src/modules/collection/sources.ts) `listSources` 扩展返回 `connector_type` / `endpoint` / `auth_type` / `health_score` / `last_check_at` / `capabilities` / `scene_id`（保持现有字段不删）
-  - [ ] SubTask 5.2: `createSource` / `updateSource`：凭据字段（spec.secretFields 声明的）调 `crypto.encryptSecret` 入 `data_source_secrets`，主表不存敏感字段；非敏感字段入 `data_sources` `[P]`
-  - [ ] SubTask 5.3: `getSource` 返回时凭据字段一律脱敏（如 password → `****`），新增 `maskSecrets()` 工具
-  - [ ] SubTask 5.4: `deleteSource` 级联删 `data_source_secrets` + `data_source_health`（FK ON DELETE CASCADE 已配）
-  - [ ] SubTask 5.5: `testSource(config)` 调 `getConnector(type).test(config)`，结果不入库 `[P]`
-  - [ ] SubTask 5.6: `testSourceById(id)` 从库读 + 解密凭据 + 调 test，结果写 `data_source_health` + 更新 `data_sources.health_score/last_check_at` `[P]`
-  - [ ] SubTask 5.7: `discoverSource(id)` 调 `getConnector(type).discover(config)`，结果写 `data_sources.schema_catalog` `[P]`
-  - [ ] SubTask 5.8: `getHealthHistory(id, range)` 返回 `data_source_health` 时间序列
+- [x] Task 5: sources.ts 升级
+  - [x] SubTask 5.1: [sources.ts](file:///workspace/server/src/modules/collection/sources.ts) `listSources` 扩展返回 `connector_type` / `endpoint` / `auth_type` / `health_score` / `last_check_at` / `capabilities` / `scene_id`（保持现有字段不删）
+  - [x] SubTask 5.2: `createSource` / `updateSource`：凭据字段（spec.secretFields 声明的）调 `crypto.encryptSecret` 入 `data_source_secrets`，主表不存敏感字段；非敏感字段入 `data_sources.config_json` `[P]`
+  - [x] SubTask 5.3: `getSource` 返回时凭据字段一律脱敏（如 password → `****`），新增 `maskSecrets()` 工具
+  - [x] SubTask 5.4: `deleteSource` 级联删 `data_source_secrets` + `data_source_health`（FK ON DELETE CASCADE 已配）
+  - [x] SubTask 5.5: `testSource(config)` 调 `getConnector(type).test(config)`，结果不入库 `[P]`
+  - [x] SubTask 5.6: `testSourceById(id)` 从库读 + 解密凭据 + 调 test，结果写 `data_source_health` + 更新 `data_sources.health_score/last_check_at` `[P]`
+  - [x] SubTask 5.7: `discoverSource(id)` 调 `getConnector(type).discover(config)`，结果写 `data_sources.schema_catalog` `[P]`
+  - [x] SubTask 5.8: `getHealthHistory(id, range)` 返回 `data_source_health` 时间序列
 
-- [ ] Task 6: collection/routes.ts 扩展
-  - [ ] SubTask 6.1: 在 [routes.ts](file:///workspace/server/src/modules/collection/routes.ts) 注册新端点：`GET /collection/connectors`、`GET /collection/connectors/:type`、`POST /collection/sources/test`、`POST /collection/sources/:id/test`、`POST /collection/sources/:id/discover`、`GET /collection/sources/:id/health-history`、`POST /collection/sources/:id/health-check` `[P]`
-  - [ ] SubTask 6.2: 所有写端点经 `requireRole(['admin','group-monitor'])` + `audit()` 装饰器 `[P]`
+- [x] Task 6: collection/routes.ts 扩展
+  - [x] SubTask 6.1: 在 [routes.ts](file:///workspace/server/src/modules/collection/routes.ts) 注册新端点：`GET /collection/connectors`、`GET /collection/connectors/:type`、`POST /collection/sources/test`、`POST /collection/sources/:id/test`、`POST /collection/sources/:id/discover`、`GET /collection/sources/:id/health-history`、`POST /collection/sources/:id/health-check` `[P]`
+  - [x] SubTask 6.2: 所有写端点经 `requireRole(['admin','group_admin'])` + `recordAudit()` 装饰器 `[P]`
+
+> Phase 3 验证：18/18 端到端 API 测试通过（[scripts/test-phase3.sh](file:///workspace/server/scripts/test-phase3.sh)），含凭据加密入库/脱敏回显/级联删除/审计日志/401 鉴权/占位连接器 NOT_IMPLEMENTED。schema.sql 新增 `config_json` 列存非敏感配置。
 
 ## Phase 4：Transform 管道
 

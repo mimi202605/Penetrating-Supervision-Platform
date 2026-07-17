@@ -54,6 +54,24 @@ export const config = {
   rateLimitWindow: str("RATE_LIMIT_WINDOW", "1 minute"),
   // 是否在启动时执行种子数据
   seedOnBoot: bool("SEED_ON_BOOT", true),
+  // V2：数据源凭据加密密钥（AES-256-GCM，必须 32 字节）
+  // 生产环境必须通过环境变量 SOURCE_SECRET_KEY 覆盖
+  sourceSecretKey: str("SOURCE_SECRET_KEY", "dev-insecure-key-change-me-32byt"),
+  // V2：加密密钥引用的环境变量名（用于审计追溯，不存储密钥本身）
+  sourceSecretKeyRef: str("SOURCE_SECRET_KEY_REF", "SOURCE_SECRET_KEY"),
 } as const;
+
+// V2：校验加密密钥长度（AES-256 需 32 字节）
+if (config.sourceSecretKey.length !== 32) {
+  throw new Error(
+    `SOURCE_SECRET_KEY 长度必须为 32 字节（当前 ${config.sourceSecretKey.length}），AES-256-GCM 要求。`,
+  );
+}
+// V2：生产环境禁止使用默认密钥
+if (!config.isDev && config.sourceSecretKey === "dev-insecure-key-change-me-32byt") {
+  throw new Error(
+    "SOURCE_SECRET_KEY 仍为默认值，生产环境(NODE_ENV!=development)必须通过环境变量设置一个 32 字节强随机密钥。",
+  );
+}
 
 export type AppConfig = typeof config;

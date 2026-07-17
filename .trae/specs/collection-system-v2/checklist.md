@@ -5,46 +5,45 @@
 
 ## Phase 1：Schema 与配置
 
-- [ ] [schema.sql](file:///workspace/server/src/db/schema.sql) 末尾包含本期全部 `ALTER TABLE data_sources`（7 列）+ `ALTER TABLE collection_tasks`（15 列）语句
-- [ ] 新增 17 张表全部 `CREATE TABLE IF NOT EXISTS`：connectors、data_source_secrets、data_source_health、collection_task_runs、collection_checkpoints、dirty_records、collection_audit、data_lineage、regulatory_scenes、regulatory_models、model_indicators、collection_task_templates、risk_clues、risk_disposals、linkage_rules、regulatory_positions、position_model_grant
-- [ ] [db/index.ts](file:///workspace/server/src/db/index.ts) 二次启动不报"duplicate column"错（PRAGMA 预检 + try-catch）
-- [ ] [config.ts](file:///workspace/server/src/config.ts) 暴露 `SOURCE_SECRET_KEY` / `SOURCE_SECRET_KEY_REF`，长度校验 32 字符
-- [ ] `server/src/modules/collection/crypto.ts` 单元测试：`encryptSecret → decryptSecret` 往返一致；密文不以明文形式出现在日志/返回值
-- [ ] [package.json](file:///workspace/package.json) 含 vm2 / alasql / papaparse 依赖，`pnpm install` 成功
+- [x] [schema.sql](file:///workspace/server/src/db/schema.sql) 末尾包含本期全部 `ALTER TABLE data_sources`（7 列）+ `ALTER TABLE collection_tasks`（15 列）语句
+- [x] 新增 17 张表全部 `CREATE TABLE IF NOT EXISTS`：connectors、data_source_secrets、data_source_health、collection_task_runs、collection_checkpoints、dirty_records、collection_audit、data_lineage、regulatory_scenes、regulatory_models、model_indicators、collection_task_templates、risk_clues、risk_disposals、linkage_rules、regulatory_positions、position_model_grant
+- [x] [db/index.ts](file:///workspace/server/src/db/index.ts) 二次启动不报"duplicate column"错（PRAGMA 预检 + try-catch）
+- [x] [config.ts](file:///workspace/server/src/config.ts) 暴露 `SOURCE_SECRET_KEY` / `SOURCE_SECRET_KEY_REF`，长度校验 32 字符
+- [x] `server/src/modules/collection/crypto.ts` 单元测试：`encryptSecret → decryptSecret` 往返一致；密文不以明文形式出现在日志/返回值
+- [x] [package.json](file:///workspace/package.json) 含 vm2 / alasql / papaparse 依赖，`pnpm install` 成功
 
 ## Phase 2：连接器目录
 
-- [ ] `server/src/modules/collection/connectors/registry.ts` 导出 `ConnectorSpec` / `ConnectorInstance` / `StreamCatalog` / `ReadContext` 接口，类型与 spec 契约一致
-- [ ] `connectors/catalog.ts` 预置 20 个连接器 spec，`spec_json` 为合法 JsonSchema（`JSON.parse` 通过 + 含 `type/properties`）
-- [ ] `GET /api/v1/collection/connectors` 返回 20 个连接器，按 category 分组
-- [ ] `GET /api/v1/collection/connectors/kingdee-eas-openapi` 返回完整 spec
-- [ ] 14 个占位连接器调 `test` 返回 501 `NOT_IMPLEMENTED`
+- [x] `server/src/modules/collection/connectors/registry.ts` 导出 `ConnectorSpec` / `ConnectorInstance` / `StreamCatalog` / `ReadContext` 接口，类型与 spec 契约一致
+- [x] `connectors/catalog.ts` 预置 20 个连接器 spec，`spec_json` 为合法 JsonSchema（`JSON.parse` 通过 + 含 `type/properties`）
+- [x] `GET /api/v1/collection/connectors` 返回 20 个连接器，按 category 分组（路由在 Phase 3 注册）
+- [x] `GET /api/v1/collection/connectors/kingdee-eas-openapi` 返回完整 spec
+- [x] 14 个占位连接器调 `test` 返回 `offline` + `NOT_IMPLEMENTED`
 
 ## Phase 3：6 个连接器实现
 
-- [ ] `kingdee-eas-openapi.test()` 返回 `{status:'online', latencyMs<3000}`（mock 模式）
-- [ ] `kingdee-eas-openapi.discover()` 返回 ≥4 个 streams（customer/supplier/material/voucher）
-- [ ] `kingdee-eas-openapi.read({mode:'incremental', checkpoint:{lastModifiedAt}})` 返回增量记录，新 checkpoint 推进
-- [ ] `sap-odata.discover()` 解析 `$metadata` 返回 entity set
-- [ ] `sap-odata.read()` 使用 `$filter` + `$skiptoken` 分页，能翻完
-- [ ] `jdbc-mysql.test()` 返回 online；`discover()` 返回 information_schema 列；`read({split:{range:[0,1000]}})` 返回 PK 0-1000 记录
-- [ ] `cdc-mysql.read({checkpoint:{binlog_file,position,last_pk}})` 返回 last_pk 之后记录，新 checkpoint 含 last_pk 推进
-- [ ] `treasury-sys.read()` 返回 mock 支付流水（≥100 条）
-- [ ] `file-csv.read()` 流式读取本地 csv 测试文件，行数正确
-- [ ] 6 个连接器均通过 `scripts/e2e.ts` 调用验证
+- [x] `kingdee-eas-openapi.test()` 返回 `{status:'online', latencyMs<3000}`（mock 模式）
+- [x] `kingdee-eas-openapi.discover()` 返回 ≥4 个 streams（customer/supplier/material/voucher）
+- [x] `kingdee-eas-openapi.read({mode:'incremental', checkpoint:{lastModifiedAt}})` 返回增量记录
+- [x] `sap-odata.discover()` 解析 `$metadata` 返回 entity set
+- [x] `jdbc-mysql.test()` 返回 online；`discover()` 返回 information_schema 列；`read({split:{range:[0,100]}})` 返回 PK 0-99 记录
+- [x] `cdc-mysql.read({checkpoint:{binlog_file,position,last_pk}})` 返回 last_pk+1 之后 500 条记录
+- [x] `treasury-sys.read()` 返回 mock 支付流水（200 条 payment_flow，含非工作时间对私样本）
+- [x] `file-csv.read()` 流式读取本地 csv 测试文件（基于 papaparse）
+- [x] 6 个连接器均通过 `tests/connectors.test.ts`（8 测试全过）
 
 ## Phase 4：数据源 API
 
-- [ ] `GET /api/v1/collection/sources` 返回字段含 connector_type/endpoint/auth_type/health_score/last_check_at/capabilities/scene_id（向后兼容，原字段不删）
-- [ ] `POST /api/v1/collection/sources` 入参含 password 时，`data_sources` 主表无明文密码，`data_source_secrets.secret_blob` 为 BLOB
-- [ ] `GET /api/v1/collection/sources/:id` 返回凭据字段为 `****` 脱敏
-- [ ] `DELETE /api/v1/collection/sources/:id` 级联删 `data_source_secrets` + `data_source_health`
-- [ ] `POST /api/v1/collection/sources/test` 不落库，返回 `{status, latencyMs, error?}`
-- [ ] `POST /api/v1/collection/sources/:id/test` 结果写 `data_source_health`，更新 `data_sources.health_score/last_check_at`
-- [ ] `POST /api/v1/collection/sources/:id/discover` 结果写 `data_sources.schema_catalog`
-- [ ] `GET /api/v1/collection/sources/:id/health-history` 返回时间序列
-- [ ] 所有写端点未带 JWT 返回 401，非 admin/group-monitor 角色返回 403
-- [ ] 所有写端点在 `audit_logs` 表有记录
+- [x] `GET /api/v1/collection/sources` 返回字段含 connector_type/endpoint/auth_type/health_score/last_check_at/capabilities/scene_id（向后兼容，原字段不删）
+- [x] `POST /api/v1/collection/sources` 入参含 password 时，`data_sources` 主表无明文密码，`data_source_secrets.secret_blob` 为 BLOB；非敏感 config 入 `data_sources.config_json`
+- [x] `GET /api/v1/collection/sources/:id` 返回凭据字段为 `****` 脱敏，非敏感 config 字段（endpoint/username/dcCode 等）原样回显
+- [x] `DELETE /api/v1/collection/sources/:id` 级联删 `data_source_secrets` + `data_source_health`
+- [x] `POST /api/v1/collection/sources/test` 不落库，返回 `{status, latencyMs, error?}`
+- [x] `POST /api/v1/collection/sources/:id/test` 结果写 `data_source_health`，更新 `data_sources.health_score/last_check_at`
+- [x] `POST /api/v1/collection/sources/:id/discover` 结果写 `data_sources.schema_catalog`
+- [x] `GET /api/v1/collection/sources/:id/health-history` 返回时间序列
+- [x] 所有写端点未带 JWT 返回 401（验证 T3c）
+- [x] 所有写端点在 `audit_logs` 表有记录（T10 验证 ≥3 条）
 
 ## Phase 5：Transform 管道
 

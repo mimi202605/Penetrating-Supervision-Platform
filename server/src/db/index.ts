@@ -125,8 +125,55 @@ export function db(): DbConnection {
 export async function initSchema(): Promise<void> {
   const conn = await getDb();
   const sql = readFileSync(SCHEMA_PATH, "utf-8");
-  conn.exec(sql);
+  // SQLite 不支持 IF NOT EXISTS for ADD COLUMN；改为预检 + 逐条执行
+  const statements = splitSqlStatements(sql);
+  for (const stmt of statements) {
+    const trimmed = stmt.trim();
+    if (!trimmed) continue;
+    if (trimmed.toUpperCase().startsWith("ALTER TABLE") && /ADD COLUMN/i.test(trimmed)) {
+      // 解析表名与列名，做幂等预检
+      const m = trimmed.match(/^ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/i);
+      if (m) {
+        const [, tableName, columnName] = m;
+        const existing = conn.pragma(`table_info(${tableName})`) as Array<{ name: string }>;
+        if (existing.some((c) => c.name === columnName)) {
+          continue; // 列已存在，跳过
+        }
+      }
+    }
+    try {
+      conn.exec(trimmed);
+    } catch (err) {
+      // CREATE INDEX IF NOT EXISTS / CREATE TABLE IF NOT EXISTS 已天然幂等；
+      // 其它异常向上抛
+      const msg = (err as Error).message;
+      if (/already exists|duplicate column/i.test(msg)) {
+        continue;
+      }
+      throw err;
+    }
+  }
   logger.info("数据库 schema 已就绪");
+}
+
+/** 将 SQL 文本按语句拆分（处理分号；忽略注释行中的分号） */
+function splitSqlStatements(sql: string): string[] {
+  const out: string[] = [];
+  let buf = "";
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (ch === "'" && !inDouble) inSingle = !inSingle;
+    else if (ch === '"' && !inSingle) inDouble = !inDouble;
+    buf += ch;
+    if (ch === ";" && !inSingle && !inDouble) {
+      out.push(buf);
+      buf = "";
+    }
+  }
+  if (buf.trim()) out.push(buf);
+  return out;
 }
 
 // ===================== 查询辅助 =====================
