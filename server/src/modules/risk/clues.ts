@@ -5,6 +5,7 @@ import { execute, queryAll, queryOne, transaction } from "../../db/index.js";
 import { camelize } from "../../utils/case.js";
 import { eventBus } from "../platform/eventbus.js";
 import { logger } from "../../utils/logger.js";
+import { PROGRESS_BY_NODE } from "../dispatch/workflow.js";
 
 /** 线索状态 */
 export type ClueStatus =
@@ -202,8 +203,8 @@ export function dispatchClue(
   transaction(() => {
     execute(
       `INSERT INTO work_orders (id, risk_source, owner, current_node, progress, status, risk_warning_id, created_at, updated_at)
-       VALUES (?, ?, ?, 'dispatch', 10, 'processing', NULL, ?, ?)`,
-      [orderId, clue.description || `线索 ${clueId}`, resolvedOwner, now, now],
+       VALUES (?, ?, ?, 'dispatch', ?, 'processing', NULL, ?, ?)`,
+      [orderId, clue.description || `线索 ${clueId}`, resolvedOwner, PROGRESS_BY_NODE.dispatch, now, now],
     );
     execute(
       "UPDATE risk_clues SET status = 'dispatched', assigned_to = ?, work_order_id = ? WHERE id = ?",
