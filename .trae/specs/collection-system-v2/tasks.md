@@ -166,14 +166,16 @@
 
 ## Phase 9：AI 智能体编排
 
-- [ ] Task 19: agents 模块
-  - [ ] SubTask 19.1: 新建 `server/src/modules/ai/agents/registry.ts`：16 类智能体 spec 元数据（id/category/capabilities/input/protocol/model）；`listAgents()` / `getAgent(id)` `[P]`
-  - [ ] SubTask 19.2: 新建 `agents/info-extract.ts`：输入文本/表格 → 调 [ai-service.ts](file:///workspace/server/src/modules/ai/ai-service.ts) → 输出结构化字段；未配 LLM 时返回占位结构 `[P]`
-  - [ ] SubTask 19.3: 新建 `agents/text-compare.ts`：输入两段文本 → 输出相似度 + 差异片段（标书查重/阴阳合同）；本地用 cosine 相似度 + diff，可选 LLM 增强 `[P]`
-  - [ ] SubTask 19.4: 新建 `agents/report-generate.ts`：输入 clueIds + 模板 → 输出风险报告 markdown；调 LLM 或模板拼接 `[P]`
-  - [ ] SubTask 19.5: 新建 `agents/orchestrator.ts`：`orchestrate(workflow)` LangGraph 等价状态图；首批预置 1 个工作流：`extract→graph-build→report-generate`（合同审查场景）
-  - [ ] SubTask 19.6: routes 注册 `/ai/agents`、`/ai/agents/:id/invoke`、`/ai/agents/orchestrate`；强制 `sanitizeForAI` 预处理入参 `[P]`
-  - [ ] SubSubTask 19.7: [routes.ts](file:///workspace/server/src/modules/ai/routes.ts) 注册 agents 子路由
+- [x] Task 19: agents 模块
+  - [x] SubTask 19.1: 新建 `server/src/modules/ai/agents/registry.ts`：16 类智能体 spec 元数据（id/category/capabilities/input/protocol/model）；`listAgents()` / `getAgent(id)` `[P]`
+  - [x] SubTask 19.2: 新建 `agents/info-extract.ts`：输入文本/表格 → 调 [ai-service.ts](file:///workspace/server/src/modules/ai/ai-service.ts) → 输出结构化字段；未配 LLM 时返回占位结构 `[P]`
+  - [x] SubTask 19.3: 新建 `agents/text-compare.ts`：输入两段文本 → 输出相似度 + 差异片段（标书查重/阴阳合同）；本地用 cosine 相似度 + diff，可选 LLM 增强 `[P]`
+  - [x] SubTask 19.4: 新建 `agents/report-generate.ts`：输入 clueIds + 模板 → 输出风险报告 markdown；调 LLM 或模板拼接 `[P]`
+  - [x] SubTask 19.5: 新建 `agents/orchestrator.ts`：`orchestrate(workflow)` LangGraph 等价状态图；首批预置 1 个工作流：`extract→graph-build→report-generate`（合同审查场景）
+  - [x] SubTask 19.6: routes 注册 `/ai/agents`、`/ai/agents/:id/invoke`、`/ai/agents/orchestrate`；强制 `sanitizeForAI` 预处理入参 `[P]`
+  - [x] SubSubTask 19.7: [routes.ts](file:///workspace/server/src/modules/ai/routes.ts) 注册 agents 子路由
+
+> Phase 9 验证：36/36 端到端 API 测试通过（[scripts/test-phase9.sh](file:///workspace/server/scripts/test-phase9.sh)），8 部分覆盖：智能体 registry（16 类 spec + 3 已实现 + 404 + 401）、info-extract（占位响应 + 400 + sanitizeForAI 脱敏验证 audit_logs）、text-compare（cosine 相似度 + LCS diff + 相同/相似/不同文本 + 400）、report-generate（造风险线索 → 生成 markdown 报告 + 404 + 400）、orchestrate（contract-review 三节点链 + 节点结构 + 404 + 400 + totalLatencyMs）、未实现 501 + 鉴权 401、向后兼容（/ai/query、/ai/contract-review、/ai/health、/ai/logs 仍可用）、AI 调用日志（ai_call_logs 含 agent 调用 + endpoint 正确）。关键修复：text-compare 分词器中文逐字 token（原 split 把整段中文当一个 token 导致相似度恒 0）。
 
 ## Phase 10：可观测、前端、联调
 
