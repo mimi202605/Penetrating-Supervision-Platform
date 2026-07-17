@@ -122,13 +122,13 @@
 
 ## Phase 10：AI 智能体
 
-- [ ] `GET /api/v1/ai/agents` 返回 16 类智能体 spec
-- [ ] `POST /api/v1/ai/agents/info-extract/invoke` 输入文本 → 返回结构化字段（未配 LLM 时返回占位）
-- [ ] `POST /api/v1/ai/agents/text-compare/invoke` 输入两段文本 → 返回相似度 + 差异
-- [ ] `POST /api/v1/ai/agents/report-generate/invoke` 输入 clueIds → 返回 markdown 报告
-- [ ] `POST /api/v1/ai/agents/orchestrate` 编排 `extract→graph-build→report-generate`，返回各节点产出
-- [ ] 所有 AI 端点入参经过 [sanitizer.ts](file:///workspace/server/src/modules/ai/sanitizer.ts) 脱敏（用敏感字段入参验证日志中无明文）
-- [ ] AI 调用全链路写入 `ai_call_logs`（脱敏后入参/出参/耗时/token）
+- [x] `GET /api/v1/ai/agents` 返回 16 类智能体 spec（T1/T2 验证：16 个 agent + 字段完整含 id/name/category/capabilities/inputSchema/outputSchema/protocol/model/implemented；T3 验证 3 个 implemented=true；T4 验证 spec 详情 protocol=internal；T5 验证 404；T6 验证 401）
+- [x] `POST /api/v1/ai/agents/info-extract/invoke` 输入文本 → 返回结构化字段（未配 LLM 时返回占位）（T7 验证：configured=false + message；T8 验证 400 body 校验；T9 验证 sanitizeForAI 触发 audit_logs action=sanitize）
+- [x] `POST /api/v1/ai/agents/text-compare/invoke` 输入两段文本 → 返回相似度 + 差异（T10 相似>0.8；T11 相同=1.0；T12 不同<0.1；T13 diff 结构含 type/text；T14 验证 400；关键修复：tokenizer 中文逐字 token，原 split 把整段中文当一个 token 导致相似度恒 0）
+- [x] `POST /api/v1/ai/agents/report-generate/invoke` 输入 clueIds → 返回 markdown 报告（T15-T19 验证：造数据源+红线模型+采集任务 → 触发 → 线索 → 报告含四节模板；T18 验证 404 clueCount=0；T19 验证 400）
+- [x] `POST /api/v1/ai/agents/orchestrate` 编排 `extract→graph-build→report-generate`，返回各节点产出（T23 验证 contract-review 三节点链；T24 验证节点结构含 node/status/output/latencyMs；T25 验证 404 workflow 不存在；T26 验证 400；T27 验证 totalLatencyMs）
+- [x] 所有 AI 端点入参经过 [sanitizer.ts](file:///workspace/server/src/modules/ai/sanitizer.ts) 脱敏（用敏感字段入参验证日志中无明文）（T9 验证：orchestrate input 含 name/amount 字段触发 sanitizeForAI，audit_logs action=sanitize 有记录；routes.ts 所有 agent 端点强制 `sanitizeForAI(parsed.data, getEnabledPolicies(), {operator, role})` 预脱敏）
+- [x] AI 调用全链路写入 `ai_call_logs`（脱敏后入参/出参/耗时/token）（T36/T37 验证：ai_call_logs 含 agent 调用记录 + endpoint 正确；T32-T35 验证向后兼容 /ai/query、/ai/contract-review、/ai/health、/ai/logs 仍可用）
 
 ## Phase 11：可观测
 
