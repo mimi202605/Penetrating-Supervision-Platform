@@ -151,7 +151,11 @@ export const registerWorkOrders: FastifyPluginCallback = (app, _opts, done) => {
     },
   );
 
-  // PUT /dispatch/work-orders/:id - 更新（如改 owner）
+  // PUT /dispatch/work-orders/:id - 更新（仅允许改 owner / riskSource 等元数据）
+  // 注意：currentNode / progress / status 受状态机约束（见 workflow.ts advanceWorkOrder），
+  // 之前 PUT 直接写这三列会绕过状态机：可把 verify 直接改成 archive（progress 仍为 20）、
+  // 跳过 risk_warnings → resolved 联动、写入非法节点名。故此处禁止通过 PUT 修改这三列，
+  // 流转一律走 POST /:id/advance。
   app.put(
     "/dispatch/work-orders/:id",
     { preHandler: [requireRole("admin", "duty_officer", "inspector")] },
@@ -166,6 +170,18 @@ export const registerWorkOrders: FastifyPluginCallback = (app, _opts, done) => {
         reply.code(404).send({ error: "not_found", message: "工单不存在", statusCode: 404 });
         return;
       }
+      if (
+        body.currentNode !== undefined ||
+        body.progress !== undefined ||
+        body.status !== undefined
+      ) {
+        reply.code(400).send({
+          error: "bad_request",
+          message: "currentNode/progress/status 不可通过 PUT 修改，请使用 POST /dispatch/work-orders/:id/advance 推进",
+          statusCode: 400,
+        });
+        return;
+      }
       const sets: string[] = [];
       const params: unknown[] = [];
       if (body.riskSource !== undefined) {
@@ -176,21 +192,13 @@ export const registerWorkOrders: FastifyPluginCallback = (app, _opts, done) => {
         sets.push("owner = ?");
         params.push(body.owner);
       }
-      if (body.currentNode !== undefined) {
-        sets.push("current_node = ?");
-        params.push(body.currentNode);
-      }
-      if (body.progress !== undefined) {
-        sets.push("progress = ?");
-        params.push(body.progress);
-      }
-      if (body.status !== undefined) {
-        sets.push("status = ?");
-        params.push(body.status);
-      }
       if (body.riskWarningId !== undefined) {
         sets.push("risk_warning_id = ?");
         params.push(body.riskWarningId);
+      }
+      if (sets.length === 0) {
+        reply.code(400).send({ error: "bad_request", message: "无待更新字段", statusCode: 400 });
+        return;
       }
       sets.push("updated_at = ?");
       params.push(nowFormatted());

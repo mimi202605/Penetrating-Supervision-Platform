@@ -4,6 +4,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { queryAll, queryOne } from "../../db/index.js";
 import { camelize } from "../../utils/case.js";
+import { requirePermission } from "../platform/rbac.js";
 
 /** 审计查询参数 */
 interface AuditQuery {
@@ -40,8 +41,11 @@ function transformAuditRow(row: Record<string, unknown>): Record<string, unknown
 export const registerSystemAudit: FastifyPluginAsync = async (app, _opts) => {
   app.addHook("preHandler", app.authenticate);
 
-  // GET /system/audit - 审计日志分页查询
-  app.get("/system/audit", async (request: FastifyRequest, reply) => {
+  // GET /system/audit - 审计日志分页查询（含登录 IP、全量操作明细，仅授予 audit:read 的角色可读）
+  app.get(
+    "/system/audit",
+    { preHandler: [requirePermission("audit:read")] },
+    async (request: FastifyRequest, reply) => {
     const q = request.query as AuditQuery;
     const page = Math.max(1, parseInt(q.page || "1", 10) || 1);
     const pageSize = Math.max(1, Math.min(200, parseInt(q.pageSize || "20", 10) || 20));

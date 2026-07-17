@@ -95,12 +95,25 @@ export function buildPenetrationTree(): PenetrationNode {
     orgs.find((o) => o.level === 1 && o.parent_id === null) ||
     orgs[0];
 
-  const buildNode = (org: OrgRow): PenetrationNode => {
+  const buildNode = (org: OrgRow, visited: Set<string>): PenetrationNode => {
+    // 防止 organizations.parent_id 出现环（自指/互指/更长环）导致无限递归栈溢出。
+    // schema.sql 未对 parent_id 加 FK 约束也无环检测，脏数据会直接让 /penetration/tree 永久 500。
+    if (visited.has(org.id)) {
+      return {
+        id: org.id,
+        name: org.name,
+        type: org.type ?? "",
+        level: org.level,
+        metrics: METRICS[org.id] ?? DEFAULT_METRICS,
+        children: [],
+      };
+    }
+    visited.add(org.id);
     const childOrgs = byParent.get(org.id) || [];
     // 叶子组织（level>=3 或无子组织）挂账户/流水子树
     const accountChildren = childOrgs.length === 0 ? buildAccountSubtree(org.id) : [];
     const children = [
-      ...childOrgs.map(buildNode),
+      ...childOrgs.map((c) => buildNode(c, visited)),
       ...accountChildren,
     ];
     return {
@@ -113,7 +126,7 @@ export function buildPenetrationTree(): PenetrationNode {
     };
   };
 
-  return buildNode(root);
+  return buildNode(root, new Set<string>());
 }
 
 /** 检索命中卡片 */

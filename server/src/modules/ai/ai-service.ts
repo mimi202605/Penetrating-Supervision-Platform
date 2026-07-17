@@ -30,6 +30,16 @@ function userContext(user: JwtUser | undefined): { id: string | null; role: stri
   };
 }
 
+/**
+ * 转义用于 SQL LIKE / Cypher 字符串字面量中的用户输入，防注入。
+ * 占位响应会把 safeQuery 插值进 suggestedSql / suggestedGraphQuery 字符串返回给客户端，
+ * 若客户端直接执行，单引号注入（如 `' OR '1'='1`）会造成 SQL/Cypher 注入。
+ * 这里转义单引号（SQL 标准用 ''，Cypher 同样接受 \\'）并移除语句分隔符。
+ */
+export function escapeForLiteral(s: string): string {
+  return s.replace(/'/g, "''").replace(/;|--/g, "");
+}
+
 /** 对载荷脱敏并返回结果 */
 function sanitizePayload(payload: unknown, user: JwtUser | undefined) {
   const ctx = userContext(user);
@@ -85,8 +95,8 @@ export async function naturalLanguageQuery(
   return {
     understood: true,
     intent: "penetration_query",
-    suggestedSql: `SELECT * FROM transactions t JOIN accounts a ON t.account_id = a.id WHERE a.org_id IN (SELECT id FROM organizations WHERE name LIKE '%${truncate(safeQuery, 30)}%')`,
-    suggestedGraphQuery: `MATCH (o:org)-[:持有]->(a:account)-[:'资金流向']->(c:counterparty) WHERE o.name CONTAINS '${truncate(safeQuery, 30)}' RETURN o,a,c`,
+    suggestedSql: `SELECT * FROM transactions t JOIN accounts a ON t.account_id = a.id WHERE a.org_id IN (SELECT id FROM organizations WHERE name LIKE '%${escapeForLiteral(truncate(safeQuery, 30))}%')`,
+    suggestedGraphQuery: `MATCH (o:org)-[:持有]->(a:account)-[:'资金流向']->(c:counterparty) WHERE o.name CONTAINS '${escapeForLiteral(truncate(safeQuery, 30))}' RETURN o,a,c`,
     message: isAIConfigured()
       ? `AI 调用失败：${llm.error ?? "未知错误"}`
       : "需配置 AI_API_BASE，当前返回结构化占位响应",

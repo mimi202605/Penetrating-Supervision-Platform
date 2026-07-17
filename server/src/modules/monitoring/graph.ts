@@ -122,7 +122,11 @@ export const registerGraph: FastifyPluginCallback = (app: FastifyInstance, _opts
         reply.code(400).send({ error: "bad_request", message: "缺少 centerNodeId 参数", statusCode: 400 });
         return;
       }
-      const depth = Math.max(1, Math.min(5, Number(q.depth ?? 2)));
+      // depth 解析：Number("abc")=NaN，Math.max(1, Math.min(5, NaN))=NaN，
+      // 而 `d >= NaN` 恒为 false，会让 BFS 跳过深度剪枝、返回整个连通分量。
+      // 非有限数字或越界时回退到默认 2。
+      const parsedDepth = Number(q.depth ?? 2);
+      const depth = Number.isFinite(parsedDepth) ? Math.max(1, Math.min(5, Math.floor(parsedDepth))) : 2;
       ensureGraph();
       if (!nodeMap.has(centerNodeId)) {
         reply.code(404).send({ error: "not_found", message: "中心节点不存在", statusCode: 404 });
