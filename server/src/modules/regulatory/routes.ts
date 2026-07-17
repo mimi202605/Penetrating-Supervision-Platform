@@ -37,6 +37,7 @@ import {
   instantiateTemplate,
   type TemplateBody,
 } from "./templates.js";
+import { listRules, getRule, executeRule } from "./linkage.js";
 
 /** 取当前用户 ID */
 function userIdOf(request: FastifyRequest): string | null {
@@ -373,6 +374,47 @@ export const registerRegulatoryRoutes: FastifyPluginAsync = async (app, _opts) =
       } catch (err) {
         reply.code(404).send({ error: "not_found", message: (err as Error).message, statusCode: 404 });
       }
+    },
+  );
+
+  // ---------------- 联查规则 ----------------
+
+  // GET /linkage/rules?sceneId=
+  app.get("/linkage/rules", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { sceneId } = request.query as { sceneId?: string };
+    reply.send(listRules(sceneId));
+  });
+
+  // GET /linkage/rules/:id
+  app.get("/linkage/rules/:id", async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const rule = getRule(id);
+    if (!rule) {
+      reply.code(404).send({ error: "not_found", message: "联查规则不存在", statusCode: 404 });
+      return;
+    }
+    reply.send(rule);
+  });
+
+  // POST /linkage/rules/:id/execute
+  // body: { entryEntity: string }  (ADS indicatorId as entry point)
+  app.post(
+    "/linkage/rules/:id/execute",
+    { preHandler: [requireRole("admin", "group_admin", "inspector")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body as { entryEntity?: string }) || {};
+      if (!body.entryEntity) {
+        reply.code(400).send({ error: "bad_request", message: "entryEntity 必填", statusCode: 400 });
+        return;
+      }
+      const result = executeRule(id, body.entryEntity);
+      if (!result) {
+        reply.code(404).send({ error: "not_found", message: "联查规则不存在", statusCode: 404 });
+        return;
+      }
+      recordAudit({ userId: userIdOf(request), action: "execute", target: `/linkage/rules/${id}/execute`, ip: request.ip || null, detail: { ruleId: id, entryEntity: body.entryEntity } });
+      reply.send(result);
     },
   );
 };

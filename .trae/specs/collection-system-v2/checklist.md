@@ -110,15 +110,15 @@
 
 ## Phase 9：四级穿透与联查
 
-- [ ] `GET /api/v1/penetration/ads/:indicatorId` 返回关联 DWS blockIds
-- [ ] `GET /api/v1/penetration/dws/:blockId` 返回关联 DWD detailIds
-- [ ] `GET /api/v1/penetration/dwd/:detailId` 返回关联 ODS docIds
-- [ ] `GET /api/v1/penetration/ods/:docId` 返回原始单据（含 file-csv 原文）
-- [ ] `GET /api/v1/penetration/lineage?sceneId=` 返回 `{nodes, edges}` 结构
-- [ ] 从 ADS → ODS 四级下钻链路完整（同一 scene_id 内逐级命中）
-- [ ] 现有 `GET /api/v1/monitoring/penetration/tree` 仍可用
-- [ ] `GET /api/v1/linkage/rules` 返回 10 条预置规则
-- [ ] `POST /api/v1/linkage/rules/:id/execute` 从入口点逐级 drill，返回完整穿透链
+- [x] `GET /api/v1/penetration/ads/:indicatorId` 返回关联 DWS blockIds（T8 验证：drillADS 返回 indicator + sceneId + dwsBlocks 非空）
+- [x] `GET /api/v1/penetration/dws/:blockId` 返回关联 DWD detailIds（T10 验证：drillDWS 通过 task_id 关联 ods_generic 返回 lineage + dwdDetails 非空）
+- [x] `GET /api/v1/penetration/dwd/:detailId` 返回关联 ODS docIds（T12 验证：drillDWD 返回 odsDocs 含原始 record dict）
+- [x] `GET /api/v1/penetration/ods/:docId` 返回原始单据（含 record_json 解析原文）（T13 验证：drillODS 返回 record 为 dict + stream/taskId）
+- [x] `GET /api/v1/penetration/lineage?sceneId=` 返回 `{nodes, edges}` 结构（T17 验证：含 ADS/DWS/DWD 节点 + aggregates/contains 边）
+- [x] 从 ADS → ODS 四级下钻链路完整（同一 scene_id 内逐级命中）（T20/T21 验证：executeRule 返回 chain=[ads,dws,dwd,ods] 完整四级）
+- [x] 现有 `GET /api/v1/monitoring/penetration/tree` 仍可用（T24 验证 200）
+- [x] `GET /api/v1/linkage/rules` 返回 10 条预置规则（T1 验证 10 条，T2 验证 sceneId 过滤，T3 验证 drillPath 解析）
+- [x] `POST /api/v1/linkage/rules/:id/execute` 从入口点逐级 drill，返回完整穿透链（T20 验证 rule + chain，T21 验证四级链路，T22 验证缺 body 400，T23 验证不存在 404）
 
 ## Phase 10：AI 智能体
 
