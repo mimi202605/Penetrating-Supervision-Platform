@@ -392,3 +392,5 @@ curl -X POST http://localhost:7077/api/v1/ai/query \
 ## 许可证
 
 详见 [LICENSE](file:///workspace/LICENSE)。
+
+https://www.star-history.com/?repos=mimi202605%2FPenetrating-Supervision-Platform&type=date&legend=top-left
