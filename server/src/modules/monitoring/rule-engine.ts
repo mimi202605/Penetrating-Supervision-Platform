@@ -164,3 +164,57 @@ export async function evaluateRule(
 
   return { ...base, warning };
 }
+
+/**
+ * V2 监管模型评估桥接（Task 16）
+ * - 从 collection_task_runs 拉取本次 runId 的 ODS 记录作为 facts
+ * - 调 regulatory/models.ts evaluateModelForRun 编译 rule_dsl 推理
+ * - 命中后由 evaluateModelForRun 内部 emit 'monitoring.rule.hit'，触发风险线索入库链路
+ *
+ * 与 evaluateRule 的差异：
+ *   evaluateRule 针对 DWS rules 表（V1 监控规则），命中写 risk_warnings
+ *   evaluateRegulatoryModel 针对 regulatory_models 表（V2 监管模型），命中写 risk_clues（经事件链）
+ *
+ * 保留现有 evaluateRule 不变，新方法独立导出（SubTask 16.3）。
+ */
+export async function evaluateRegulatoryModel(
+  modelId: string,
+  runId: string,
+): Promise<{ modelId: string; runId: string; hitCount: number }> {
+  // 动态导入避免循环依赖：regulatory/models.ts 通过 eventbus 间接引用本模块
+  const { evaluateModelForRun } = await import("../regulatory/models.js");
+  const result = await evaluateModelForRun(modelId, runId);
+  logger.info(
+    { modelId, runId, hitCount: result.hitCount, totalFacts: result.hits.length },
+    "监管模型评估完成（由 collection.task.done 触发）",
+  );
+  return { modelId, runId, hitCount: result.hitCount };
+}
+
+/**
+ * 注册监管模型评估桥接监听器（SubTask 16.2）
+ * - 订阅 collection.task.done → 若 task 绑定 modelId，自动调 evaluateRegulatoryModel
+ * 供 main.ts 启动时调用
+ */
+export function registerRegulatoryModelListener(): void {
+  eventBus.on("collection.task.done", async (payload: unknown) => {
+    try {
+      const p = (payload as { taskId?: string; runId?: string; modelId?: string; sceneId?: string } | undefined) ?? {};
+      if (!p.modelId) {
+        logger.debug({ taskId: p.taskId, runId: p.runId }, "[regulatory-bridge] 任务未绑定 modelId，跳过模型评估");
+        return;
+      }
+      if (!p.runId) {
+        logger.warn({ taskId: p.taskId }, "[regulatory-bridge] collection.task.done 缺少 runId，跳过");
+        return;
+      }
+      await evaluateRegulatoryModel(p.modelId, p.runId);
+    } catch (err) {
+      logger.error(
+        { err: (err as Error).message, payload },
+        "[regulatory-bridge] collection.task.done 处理失败",
+      );
+    }
+  });
+  logger.info("监管模型评估桥接监听器已注册（collection.task.done → evaluateRegulatoryModel）");
+}

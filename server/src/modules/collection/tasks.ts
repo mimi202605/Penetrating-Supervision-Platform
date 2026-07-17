@@ -8,7 +8,8 @@ import { recordAudit } from "../platform/audit.js";
 import { eventBus } from "../platform/eventbus.js";
 import { incCollectionRun, incCollectionFailure } from "../../health.js";
 import { logger } from "../../utils/logger.js";
-import { runQualityCheck } from "./quality.js";
+import { runQualityCheck, listQualityIssues } from "./quality.js";
+import { runTask, runTaskSync } from "./runtime.js";
 
 /** 采集任务新建/更新请求体 */
 interface CollectionTaskBody {
@@ -17,6 +18,20 @@ interface CollectionTaskBody {
   source?: string;
   mode?: string;
   schedule?: string;
+  sourceId?: string;
+  sinkType?: string;
+  sinkTarget?: string;
+  writeMode?: string;
+  transformPipeline?: unknown;
+  concurrency?: number;
+  retryMax?: number;
+  retryIntervalSec?: number;
+  timeoutSec?: number;
+  priority?: number;
+  dependsOn?: string[];
+  enabled?: number;
+  sceneId?: string;
+  modelId?: string;
 }
 
 /** 格式化当前时间为 "YYYY-MM-DD HH:mm"（与种子 last_run 格式一致） */
@@ -29,6 +44,32 @@ function nowFormatted(): string {
 /** 从请求中提取当前用户ID */
 function userIdOf(request: FastifyRequest): string | null {
   return (request.user as { id?: string } | undefined)?.id ?? null;
+}
+
+/** 安全 JSON 解析（失败返回原字符串） */
+function safeJsonParse(s: string | null): unknown {
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
+}
+
+/** 把 row 驼峰化并解析任务级 JSON 字段（transformPipeline/dependsOn） */
+function taskRowToApi(row: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!row) return {};
+  const camel = camelize(row) as Record<string, unknown>;
+  for (const k of ["transformPipeline", "dependsOn", "checkpointState", "fieldMapping"]) {
+    if (typeof camel[k] === "string" && camel[k]) {
+      try {
+        camel[k] = JSON.parse(camel[k] as string);
+      } catch {
+        // 保留原值
+      }
+    }
+  }
+  return camel;
 }
 
 /** 根据采集模式生成随机吞吐量（条/s）与本次采集记录数 */
@@ -52,12 +93,9 @@ function generateThroughput(mode: string): { throughput: string; records: number
 }
 
 /**
- * 模拟执行采集任务
- * - 根据 mode（全量/增量/CDC）生成随机吞吐量
- * - 写 collection_logs
- * - 更新 task 的 last_status（90% 成功 / 10% 失败）、throughput、last_run
- * - 失败则 eventBus.emit('collection.failed', {taskId, error})
- * - 成功则运行数据质量校验 runQualityCheck
+ * 兼容入口：旧版模拟执行器，已迁移到 runtime.runTaskSync（SeaTunnel 等价真采集）
+ * 仍保留旧 collection_logs/throughput 字段写入，便于前端趋势图兼容
+ * 内部委托 runtime.runTaskSync 异步执行（不阻塞调度器）
  */
 export function runCollectionTask(taskId: string): void {
   const task = queryOne<{ id: string; name: string; mode: string }>(
@@ -70,45 +108,13 @@ export function runCollectionTask(taskId: string): void {
   }
   const startedAt = nowFormatted();
   incCollectionRun();
-
-  // 模拟执行：90% 成功 / 10% 失败
-  const success = Math.random() >= 0.1;
-  const { throughput, records } = generateThroughput(task.mode || "");
-
-  if (success) {
-    const finishedAt = nowFormatted();
-    // 事务包裹 collection_logs INSERT + collection_tasks UPDATE，避免一半提交导致
-    // logs 显示"成功"而 task.last_status 仍停留在旧值的不可恢复不一致
-    transaction(() => {
-      execute(
-        "INSERT INTO collection_logs (task_id, status, started_at, finished_at, records_count, error) VALUES (?, ?, ?, ?, ?, ?)",
-        [taskId, "成功", startedAt, finishedAt, records, null],
-      );
-      execute(
-        "UPDATE collection_tasks SET last_status = ?, throughput = ?, last_run = ? WHERE id = ?",
-        ["成功", throughput, finishedAt, taskId],
-      );
-    });
-    logger.info({ taskId, throughput, records }, "采集任务执行成功");
-    // 成功后运行数据质量校验
-    runQualityCheck(taskId, records);
-  } else {
-    const finishedAt = nowFormatted();
-    const error = "连接超时：源系统响应超时（模拟）";
-    transaction(() => {
-      execute(
-        "INSERT INTO collection_logs (task_id, status, started_at, finished_at, records_count, error) VALUES (?, ?, ?, ?, ?, ?)",
-        [taskId, "失败", startedAt, finishedAt, 0, error],
-      );
-      execute(
-        "UPDATE collection_tasks SET last_status = ?, throughput = ?, last_run = ? WHERE id = ?",
-        ["失败", "—", finishedAt, taskId],
-      );
-    });
-    incCollectionFailure();
-    eventBus.emit("collection.failed", { taskId, error });
-    logger.warn({ taskId, error }, "采集任务执行失败");
-  }
+  // 兼容旧 collection_logs（任务起始日志）
+  execute(
+    "INSERT INTO collection_logs (task_id, status, started_at, finished_at, records_count, error) VALUES (?, ?, ?, ?, ?, ?)",
+    [taskId, "运行中", startedAt, null, 0, null],
+  );
+  // 委托 runtime 异步执行
+  runTaskSync(taskId);
 }
 
 /** 注册采集任务路由 */
@@ -121,7 +127,7 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
     const rows = queryAll<Record<string, unknown>>(
       "SELECT * FROM collection_tasks ORDER BY id",
     );
-    reply.send(rows.map((r) => camelize(r)));
+    reply.send(rows.map((r) => taskRowToApi(r)));
   });
 
   // GET /collection/tasks/:id - 单条
@@ -135,7 +141,7 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
       reply.code(404).send({ error: "not_found", message: "采集任务不存在", statusCode: 404 });
       return;
     }
-    reply.send(camelize(row));
+    reply.send(taskRowToApi(row));
   });
 
   // POST /collection/tasks - 新建（需 admin）
@@ -149,19 +155,35 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
         return;
       }
       const id = body.id || `T-${Date.now()}`;
-      execute(
-        "INSERT INTO collection_tasks (id, name, source, mode, schedule, last_status, throughput, last_run) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-          id,
-          body.name,
-          body.source || "其他",
-          body.mode || "增量",
-          body.schedule || "*/30 * * * *",
-          "成功",
-          "—",
-          nowFormatted(),
-        ],
-      );
+      transaction(() => {
+        execute(
+          "INSERT INTO collection_tasks (id, name, source, mode, schedule, last_status, throughput, last_run, source_id, sink_type, sink_target, write_mode, transform_pipeline, concurrency, retry_max, retry_interval_sec, timeout_sec, priority, depends_on, enabled, scene_id, model_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            id,
+            body.name,
+            body.source || "其他",
+            body.mode || "增量",
+            body.schedule || "*/30 * * * *",
+            "成功",
+            "—",
+            nowFormatted(),
+            body.sourceId || null,
+            body.sinkType || null,
+            body.sinkTarget || null,
+            body.writeMode || null,
+            body.transformPipeline ? JSON.stringify(body.transformPipeline) : null,
+            body.concurrency || 1,
+            body.retryMax || 3,
+            body.retryIntervalSec || 60,
+            body.timeoutSec || null,
+            body.priority || 5,
+            body.dependsOn ? JSON.stringify(body.dependsOn) : null,
+            body.enabled ?? 1,
+            body.sceneId || null,
+            body.modelId || null,
+          ],
+        );
+      });
       recordAudit({
         userId: userIdOf(request),
         action: "create",
@@ -173,7 +195,7 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
         "SELECT * FROM collection_tasks WHERE id = ?",
         [id],
       );
-      reply.code(201).send(camelize(row));
+      reply.code(201).send(taskRowToApi(row));
     },
   );
 
@@ -193,16 +215,37 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
         return;
       }
       const merged = { ...camelize<Record<string, unknown>>(existing), ...body };
-      execute(
-        "UPDATE collection_tasks SET name = ?, source = ?, mode = ?, schedule = ? WHERE id = ?",
-        [
-          merged.name,
-          merged.source || null,
-          merged.mode || null,
-          merged.schedule || null,
-          id,
-        ],
-      );
+      transaction(() => {
+        execute(
+          `UPDATE collection_tasks SET
+            name = ?, source = ?, mode = ?, schedule = ?,
+            source_id = ?, sink_type = ?, sink_target = ?, write_mode = ?,
+            transform_pipeline = ?, concurrency = ?, retry_max = ?, retry_interval_sec = ?,
+            timeout_sec = ?, priority = ?, depends_on = ?, enabled = ?, scene_id = ?, model_id = ?
+           WHERE id = ?`,
+          [
+            merged.name,
+            merged.source || null,
+            merged.mode || null,
+            merged.schedule || null,
+            merged.sourceId || null,
+            merged.sinkType || null,
+            merged.sinkTarget || null,
+            merged.writeMode || null,
+            merged.transformPipeline ? JSON.stringify(merged.transformPipeline) : null,
+            merged.concurrency || 1,
+            merged.retryMax || 3,
+            merged.retryIntervalSec || 60,
+            merged.timeoutSec || null,
+            merged.priority || 5,
+            merged.dependsOn ? JSON.stringify(merged.dependsOn) : null,
+            merged.enabled ?? 1,
+            merged.sceneId || null,
+            merged.modelId || null,
+            id,
+          ],
+        );
+      });
       recordAudit({
         userId: userIdOf(request),
         action: "update",
@@ -214,13 +257,131 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
         "SELECT * FROM collection_tasks WHERE id = ?",
         [id],
       );
-      reply.send(camelize(row));
+      reply.send(taskRowToApi(row));
+    },
+  );
+
+  // POST /collection/tasks/:id/trigger - 手动触发执行（异步）
+  app.post(
+    "/collection/tasks/:id/trigger",
+    { preHandler: [requireRole("admin", "group_admin")] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const body = (request.body as { dryRun?: boolean }) || {};
+      const task = queryOne<{ id: string }>(
+        "SELECT id FROM collection_tasks WHERE id = ?",
+        [id],
+      );
+      if (!task) {
+        reply.code(404).send({ error: "not_found", message: "采集任务不存在", statusCode: 404 });
+        return;
+      }
+      recordAudit({
+        userId: userIdOf(request),
+        action: "trigger",
+        target: `/collection/tasks/${id}/trigger`,
+        ip: request.ip || null,
+        detail: { id, dryRun: !!body.dryRun },
+      });
+      // 异步触发，立即返回 runId 占位
+      const runId = `run-${id}-${Date.now()}`;
+      reply.code(202).send({ runId, taskId: id, status: "accepted", dryRun: !!body.dryRun });
+      // 后台执行
+      runTask(id, { dryRun: !!body.dryRun }).catch((err) => {
+        logger.error({ taskId: id, err: (err as Error).message }, "trigger 异步执行失败");
+      });
+    },
+  );
+
+  // GET /collection/tasks/:id/runs - 任务运行历史
+  app.get(
+    "/collection/tasks/:id/runs",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const rows = queryAll<Record<string, unknown>>(
+        "SELECT * FROM collection_task_runs WHERE task_id = ? ORDER BY started_at DESC LIMIT 100",
+        [id],
+      );
+      reply.send(rows.map((r) => camelize(r)));
+    },
+  );
+
+  // GET /collection/tasks/:id/checkpoints - 断点状态
+  app.get(
+    "/collection/tasks/:id/checkpoints",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const rows = queryAll<{ task_id: string; shard_id: string; state: string; updated_at: string }>(
+        "SELECT task_id, shard_id, state, updated_at FROM collection_checkpoints WHERE task_id = ?",
+        [id],
+      );
+      reply.send(rows.map((r) => ({
+        taskId: r.task_id,
+        shardId: r.shard_id,
+        state: safeJsonParse(r.state),
+        updatedAt: r.updated_at,
+      })));
+    },
+  );
+
+  // GET /collection/tasks/:id/dirty - 脏数据列表
+  app.get(
+    "/collection/tasks/:id/dirty",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const rows = queryAll<{ id: number; run_id: string; step_id: string; raw_json: string; error: string; created_at: string }>(
+        "SELECT id, run_id, step_id, raw_json, error, created_at FROM dirty_records WHERE task_id = ? ORDER BY created_at DESC LIMIT 100",
+        [id],
+      );
+      reply.send(rows.map((r) => ({
+        id: r.id,
+        runId: r.run_id,
+        stepId: r.step_id,
+        raw: safeJsonParse(r.raw_json),
+        error: r.error,
+        createdAt: r.created_at,
+      })));
+    },
+  );
+
+  // GET /collection/tasks/:id/audit - 4 审计点
+  app.get(
+    "/collection/tasks/:id/audit",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const rows = queryAll<Record<string, unknown>>(
+        "SELECT * FROM collection_audit WHERE task_id = ? ORDER BY log_ts DESC LIMIT 200",
+        [id],
+      );
+      reply.send(rows.map((r) => camelize(r)));
+    },
+  );
+
+  // GET /collection/tasks/:id/lineage - 数据血缘
+  app.get(
+    "/collection/tasks/:id/lineage",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const rows = queryAll<Record<string, unknown>>(
+        "SELECT * FROM data_lineage WHERE task_id = ? ORDER BY created_at DESC",
+        [id],
+      );
+      reply.send(rows.map((r) => camelize(r)));
+    },
+  );
+
+  // GET /collection/tasks/:id/quality - 数据质量问题列表
+  app.get(
+    "/collection/tasks/:id/quality",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      const rows = listQualityIssues(id, 100);
+      reply.send(rows.map((r) => camelize(r)));
     },
   );
 
   // DELETE /collection/tasks/:id - 删除（需 admin）
-  // collection_logs / data_quality_issues 对 task_id 有 FK RESTRICT（schema.sql 默认），
-  // 一旦任务有执行历史，直接 DELETE 会触发 SQLITE_CONSTRAINT 抛 500。
+  // collection_logs / data_quality_issues / collection_task_runs / dirty_records 等对 task_id 有 FK，
   // 这里在事务中先清理依赖行，再删任务，保证可删除且不留孤儿。
   app.delete(
     "/collection/tasks/:id",
@@ -232,6 +393,12 @@ export const registerCollectionTasks: FastifyPluginAsync = async (app, _opts) =>
         transaction(() => {
           execute("DELETE FROM data_quality_issues WHERE task_id = ?", [id]);
           execute("DELETE FROM collection_logs WHERE task_id = ?", [id]);
+          execute("DELETE FROM collection_task_runs WHERE task_id = ?", [id]);
+          execute("DELETE FROM collection_checkpoints WHERE task_id = ?", [id]);
+          execute("DELETE FROM dirty_records WHERE task_id = ?", [id]);
+          execute("DELETE FROM collection_audit WHERE task_id = ?", [id]);
+          execute("DELETE FROM data_lineage WHERE task_id = ?", [id]);
+          execute("DELETE FROM ods_generic WHERE task_id = ?", [id]);
           const r = execute("DELETE FROM collection_tasks WHERE id = ?", [id]);
           changes = r.changes;
         });

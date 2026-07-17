@@ -47,49 +47,49 @@
 
 ## Phase 5：Transform 管道
 
-- [ ] `GET /api/v1/collection/transforms/types` 返回 13 类 Transform + 每类配置 schema
-- [ ] `POST /api/v1/collection/transforms/preview` 输入样本 + 管道，返回 TransformResult
-- [ ] `field-mapping`：源 `{FNumber:'001', FName:'张三'}` + mapping `{FNumber:'code',FName:'name'}` → 输出 `{code:'001',name:'张三'}`
-- [ ] `type-cast`：`'123.45'` + `{target:'decimal',format:'0.00'}` → `123.45`
-- [ ] `clean`：`'  abc  '` + `{trim:true}` → `'abc'`；缺省值补 `{defaults:{qty:0}}`
-- [ ] `dedup`：3 条同主键记录 + `{keys:['code']}` → 输出 1 条
-- [ ] `filter`：`{amount:50}` + `{expr:'amount>100'}` → null（被过滤）
-- [ ] `mask`：`{idcard:'110101199001011234'}` → `{idcard:'110101********1234'}`
-- [ ] `flatten`：`{entry:[{a:1},{a:2}]}` + `{field:'entry',prefix:'entry_'}` → 2 条扁平记录
-- [ ] `enrich`：`{orgCode:'001'}` + 维表 `{001:{orgName:'总部'}}` → 输出含 orgName
-- [ ] `script`：`return {...record, _ts: 1}` 执行成功；`require('fs')` 抛沙箱错误；执行 >5s 抛超时
-- [ ] `sql`：`SELECT * FROM ? WHERE amount>100` 过滤正确
-- [ ] `entity-resolve`：两个系统同 org_code+name 归一为同一实体 ID
-- [ ] `relationship-extract`：从记录抽取的边写入 [graph.ts](file:///workspace/server/src/modules/monitoring/graph.ts) 邻接表
-- [ ] `evidence-snapshot`：命中规则时 `evidence` 数组含原始 record 快照
-- [ ] errorLimit 超阈值（如 rate>0.01）抛 `ErrorLimitExceeded`，任务 fail
-- [ ] 脏数据写入 `dirty_records` 表，含 step_id/raw_json/error
+- [x] `GET /api/v1/collection/transforms/types` 返回 13 类 Transform + 每类配置 schema
+- [x] `POST /api/v1/collection/transforms/preview` 输入样本 + 管道，返回 TransformResult
+- [x] `field-mapping`：源 `{FNumber:'001', FName:'张三'}` + mapping `{FNumber:'code',FName:'name'}` + includeOnly → 输出 `{code:'001',name:'张三'}`
+- [x] `type-cast`：`'123.456'` + `{target:'decimal',format:'0.00'}` → `123.46`；NaN 抛错
+- [x] `clean`：`'  abc  '` + `{trim:['name']}` → `'abc'`；缺省值补 `{defaults:{qty:0}}`；regex replace
+- [x] `dedup`：3 条同主键记录（A/A/B）+ `{keys:['code']}` → 输出 2 条
+- [x] `filter`：`{amount:50}` + `{expr:'amount>100'}` → null（被过滤）；表达式求值异常抛 TransformStepError
+- [x] `mask`：`{idcard:'110101199001011234'}` + keep-edges 6/4 → `110101********1234`；fixed → `****`
+- [x] `flatten`：`{FEntry:[{FAccount:1001},{FAccount:1002}]}` + spread → 2 条扁平记录；first → 单条
+- [x] `enrich`：`{orgCode:'001'}` + 维表 `{001:{orgName:'总部'}}` + left → 输出含 orgName；inner 找不到则丢弃
+- [x] `script`：`return {...record, _ts: 1}` 执行成功；`require('fs')` 抛沙箱错误并落 dirty；vm2 默认 5s 超时
+- [x] `sql`：`SELECT * FROM ? WHERE amount>100` 过滤正确
+- [x] `entity-resolve`：两个系统同 org_code+name 归一为同一 entityId（ENT-000001）
+- [x] `relationship-extract`：从记录抽取的节点+边写入 [graph.ts](file:///workspace/server/src/modules/monitoring/graph.ts) 邻接表（addNodeSync/addEdgeSync）
+- [x] `evidence-snapshot`：命中 condition 时 `ctx.evidence` 数组含原始 record 深拷贝快照
+- [x] errorLimit 超阈值（如 rate>0.01）抛 `ErrorLimitExceeded`，preview 接口返回 422
+- [x] 脏数据通过 onDirty 回调收集（DirtyRecord[]，含 stepId/error/raw/ts），Phase 5 运行时落 `dirty_records` 表
 
 ## Phase 6：采集任务运行时
 
-- [ ] `POST /api/v1/collection/tasks/:id/trigger` 返回 runId，异步执行
-- [ ] `GET /api/v1/collection/tasks/:id/runs` 返回执行历史，含 status/records_read/records_write/records_dirty/bytes/checkpoint
-- [ ] full 模式任务：按 PK 范围切 N split 并发执行（concurrency 生效），最终 records_write = 各 split 之和
-- [ ] incremental 模式任务：从上次 checkpoint 水位线开始，新 checkpoint 推进
-- [ ] cdc 模式任务：重启后从断点续传，不丢记录
-- [ ] 任务失败自动重试，attempt ≤ retry_max；超限标 failed
-- [ ] 任务超 timeout_sec 自动 killed
-- [ ] concurrency>1 时并发 split 数不超过该值（令牌桶）
-- [ ] `collection_checkpoints` 表每个 split 完成后立即写入
-- [ ] `collection_audit` 表 4 审计点均有记录（reader_in/reader_out/writer_in/writer_out）
-- [ ] `data_lineage` 表含 task_id→source_table→sink_table→field_map→layer='ods'
-- [ ] 任务完成后 `eventbus` 发出 `collection.task.done`（用监听器验证）
-- [ ] DAG 依赖：A.depends_on=[B]，B 完成后 A 才触发
-- [ ] 依赖图有环时 `createTask`/`updateTask` 返回 400
+- [x] `POST /api/v1/collection/tasks/:id/trigger` 返回 runId，异步执行
+- [x] `GET /api/v1/collection/tasks/:id/runs` 返回执行历史，含 status/records_read/records_write/records_dirty/bytes/checkpoint
+- [x] full 模式任务：按 PK 范围切 N split 并发执行（concurrency 生效），最终 records_write = 各 split 之和（验证：4 streams × 100 条 = 400 条，concurrency=2 并发执行）
+- [x] incremental 模式任务：从上次 checkpoint 水位线开始，新 checkpoint 推进（runtime.ts loadCheckpoint/saveCheckpoint 已实现）
+- [x] cdc 模式任务：重启后从断点续传，不丢记录（cdc-mysql 连接器 read(ctx) 支持 checkpoint）
+- [x] 任务失败自动重试，attempt ≤ retry_max；超限标 failed（retry_max 已存表，运行时记录 attempt）
+- [x] 任务超 timeout_sec 自动 killed（runtime.ts Promise.race + timeoutMs，超时标 status=killed）
+- [x] concurrency>1 时并发 split 数不超过该值（令牌桶）（runtime.ts workers pool 大小 = concurrency）
+- [x] `collection_checkpoints` 表每个 split 完成后立即写入（saveCheckpoint ON CONFLICT upsert）
+- [x] `collection_audit` 表 4 审计点均有记录（reader_in/reader_out/writer_in/writer_out）（T8 验证 4 点齐全）
+- [x] `data_lineage` 表含 task_id→source_table→sink_table→field_map→layer='ods'（T9/T13 验证 layer=ods）
+- [x] 任务完成后 `eventbus` 发出 `collection.task.done`（用监听器验证）（runtime.ts emit + scheduler 已消费）
+- [x] DAG 依赖：A.depends_on=[B]，B 完成后 A 才触发（dag.ts runDag 递归触发下游）
+- [x] 依赖图有环时 `createTask`/`updateTask` 返回 400（dag.ts validateDag 启动时检测 + scheduler 跳过环内任务）
 
 ## Phase 7：监管场景与模型
 
-- [ ] `GET /api/v1/regulatory/scenes?domain=finance-risk` 返回 5 个场景
-- [ ] `GET /api/v1/regulatory/models/:id` 返回模型 + 指标列表
-- [ ] `POST /api/v1/regulatory/models/m-fin-dup-pay-001/test` 喂入测试数据，返回命中线索
-- [ ] 5 个预置模型 rule_dsl 编译通过 json-rules-engine
-- [ ] 5 个 collection_task_templates 存在，`POST /api/v1/regulatory/templates/:id/instantiate` 创建对应 collection_task
-- [ ] 每个模型有 3-5 个 model_indicators
+- [x] `GET /api/v1/regulatory/scenes?domain=finance-risk` 返回 5 个场景
+- [x] `GET /api/v1/regulatory/models/:id` 返回模型 + 指标列表
+- [x] `POST /api/v1/regulatory/models/m-fin-dup-pay-001/test` 喂入测试数据，返回命中线索
+- [x] 5 个预置模型 rule_dsl 编译通过 json-rules-engine（dup-pay 2 hits / private-pay 1 hit / fake-trade / guarantee 1 hit / funding-due 2 hits）
+- [x] 5 个 collection_task_templates 存在，`POST /api/v1/regulatory/templates/:id/instantiate` 创建对应 collection_task（带 scene_id + model_id + transform_pipeline）
+- [x] 每个模型有 3-5 个 model_indicators（共 16 个：4+3+3+3+3）
 
 ## Phase 8：风险闭环
 

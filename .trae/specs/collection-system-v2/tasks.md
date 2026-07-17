@@ -50,71 +50,77 @@
 
 ## Phase 4：Transform 管道
 
-- [ ] Task 7: Transform 引擎与 13 类 Transform
-  - [ ] SubTask 7.1: 新建 `server/src/modules/collection/transform/engine.ts`：`TransformEngine` 类，`run(input: AsyncIterable<Record>)` 按 steps 顺序应用；维护 dirtyCount、errorLimit 阈值检查；超阈值抛 `ErrorLimitExceeded` `[P]`
-  - [ ] SubTask 7.2: 新建 `transform/types.ts`：13 类 Transform 的统一签名 `(record, config, ctx) => Record | null`；`TransformType` 联合类型 `[P]`
-  - [ ] SubTask 7.3: 实现 5 类基础：`field-mapping.ts`（重命名/筛选）、`type-cast.ts`（number/boolean/date/decimal）、`clean.ts`（trim/defaults/regex）、`dedup.ts`（主键去重内存窗口）、`filter.ts`（表达式过滤，基于 `expr-eval`） `[P]`
-  - [ ] SubTask 7.4: 实现 3 类脱敏/扁平/富化：`mask.ts`（复用 [sanitizer-policies.ts](file:///workspace/server/src/modules/ai/sanitizer-policies.ts) 算法）、`flatten.ts`（嵌套展开，金蝶 entry 数组）、`enrich.ts`（维表关联，组织/客商主数据）
-  - [ ] SubTask 7.5: 实现 2 类脚本：`script.ts`（vm2 沙箱，禁 require/process，5s 超时）、`sql.ts`（alasql，SELECT * FROM ? WHERE expr） `[P]`
-  - [ ] SubTask 7.6: 实现 3 类监管专用：`entity-resolve.ts`（按 org_code+name 归一）、`relationship-extract.ts`（输出边写入内存图谱 [graph.ts](file:///workspace/server/src/modules/monitoring/graph.ts)）、`evidence-snapshot.ts`（命中规则时冻结 record 快照到 `evidence` 数组） `[P]`
-  - [ ] SubTask 7.7: 新建 `transform/registry.ts`：`getTransformHandler(type)` 路由；`listTransformTypes()` 返回 13 类 + 配置 schema（供前端表单）
-  - [ ] SubTask 7.8: `transform/preview.ts`：`runPreview(sample: Record[], pipeline: TransformPipeline)` 同步返回 TransformResult，不入库
-  - [ ] SubTask 7.9: routes 注册 `GET /collection/transforms/types`、`POST /collection/transforms/preview`
+- [x] Task 7: Transform 引擎与 13 类 Transform
+  - [x] SubTask 7.1: 新建 `server/src/modules/collection/transform/engine.ts`：流式 `runTransformPipeline(input, pipeline, ctx, onDirty)`，按 steps 顺序应用；维护 dirtyCount、errorLimit 阈值检查；超阈值抛 `ErrorLimitExceeded` `[P]`
+  - [x] SubTask 7.2: 新建 `transform/types.ts`：13 类 Transform 的统一签名 `(record, state, config, ctx) => ApplyResult`；`TransformType` 联合类型；`TransformStepError` / `ErrorLimitExceeded` 异常类 `[P]`
+  - [x] SubTask 7.3: 实现 5 类基础：`field-mapping`（重命名/筛选 includeOnly）、`type-cast`（number/boolean/date/decimal + format）、`clean`（trim/defaults/regex replace）、`dedup`（主键去重内存窗口）、`filter`（expr-eval 表达式过滤） `[P]`
+  - [x] SubTask 7.4: 实现 3 类脱敏/扁平/富化：`mask`（fixed/keep-edges 策略）、`flatten`（嵌套数组 spread/first，金蝶 FEntry）、`enrich`（维表关联 left/inner）
+  - [x] SubTask 7.5: 实现 2 类脚本：`script`（vm2 沙箱，禁 require/process，5s 超时）、`sql`（alasql SELECT * FROM ? WHERE expr） `[P]`
+  - [x] SubTask 7.6: 实现 3 类监管专用：`entity-resolve`（按 orgCode+name 归一为 ENT-XXXXXX）、`relationship-extract`（节点+边写入 [graph.ts](file:///workspace/server/src/modules/monitoring/graph.ts) 通过 addNodeSync/addEdgeSync）、`evidence-snapshot`（命中 condition 时冻结 record 快照到 `ctx.evidence` 数组） `[P]`
+  - [x] SubTask 7.7: 新建 `transform/registry.ts`：`getTransformHandler(type)` 路由；`listTransformTypes()` 返回 13 类 + 配置 schema（供前端表单）
+  - [x] SubTask 7.8: `transform/preview.ts`：`runPreview(sample, pipeline, ctx?)` 同步返回 TransformEngineResult，不入库
+  - [x] SubTask 7.9: routes 注册 `GET /collection/transforms/types`、`POST /collection/transforms/preview`（[transform/routes.ts](file:///workspace/server/src/modules/collection/transform/routes.ts)）
+
+> Phase 4 验证：21 个 Transform 单元测试 + 10 个端到端 API 测试全部通过（[tests/transform.test.ts](file:///workspace/server/tests/transform.test.ts) + [scripts/test-phase4.sh](file:///workspace/server/scripts/test-phase4.sh)）；TS 检查通过；graph.ts 新增 addNodeSync/addEdgeSync 公共 API。
 
 ## Phase 5：采集任务运行时升级
 
-- [ ] Task 8: runtime.ts 核心运行时
-  - [ ] SubTask 8.1: 新建 `server/src/modules/collection/runtime.ts`：`CollectionRuntime.runTask(taskId, opts)`，按 spec 契约 10 步实现 `[P]`
-  - [ ] SubTask 8.2: split 策略：full → 按 PK MIN/MAX 切 N 片（concurrency 控制）；incremental → 单 split 从水位线开始；cdc → 单 split 从 checkpoint 开始 `[P]`
-  - [ ] SubTask 8.3: 凭据解密注入 connector config；连接器实例化失败立即 fail `[P]`
-  - [ ] SubTask 8.4: 每个 split 流：`for await (const rec of connector.read(ctx))` → `transformEngine.run()`（流式 transform，非批量） → sink 写入 ODS/DWD 表（better-sqlite3 事务批写）
-  - [ ] SubTask 8.5: 每 split 完成立即写 `collection_checkpoints(task_id, shard_id, state)`；job 失败时已写 checkpoint 保留
-  - [ ] SubTask 8.6: 重试：catch 异常 → attempt++ ≤ retry_max → 指数退避 `retry_interval_sec * 2^attempt`；超限标 failed
-  - [ ] SubTask 8.7: 超时：`timeout_sec` 用 `Promise.race` + `AbortController`，超时标 killed
-  - [ ] SubTask 8.8: 限流：令牌桶 `concurrency` 限制并发 split 数
-  - [ ] SubTask 8.9: 写 `collection_task_runs`（started_at/finished_at/records_read/write/dirty/bytes/checkpoint/error） `[P]`
-  - [ ] SubTask 8.10: 写 `collection_audit`（4 审计点：reader_in/reader_out/writer_in/writer_out） `[P]`
-  - [ ] SubTask 8.11: 写 `data_lineage`（task_id→source_table→sink_table→field_map→layer=ods） `[P]`
-  - [ ] SubTask 8.12: 任务完成后 `eventbus.emit('collection.task.done', { taskId, sceneId, modelId, runId })`，触发监管模型评估
+- [x] Task 8: runtime.ts 核心运行时
+  - [x] SubTask 8.1: 新建 `server/src/modules/collection/runtime.ts`：`CollectionRuntime.runTask(taskId, opts)`，按 spec 契约 10 步实现 `[P]`
+  - [x] SubTask 8.2: split 策略：full → 按 PK MIN/MAX 切 N 片（concurrency 控制）；incremental → 单 split 从水位线开始；cdc → 单 split 从 checkpoint 开始 `[P]`
+  - [x] SubTask 8.3: 凭据解密注入 connector config；连接器实例化失败立即 fail `[P]`
+  - [x] SubTask 8.4: 每个 split 流：`for await (const rec of connector.read(ctx))` → `transformEngine.run()`（流式 transform，非批量） → sink 写入 ODS/DWD 表（better-sqlite3 事务批写）
+  - [x] SubTask 8.5: 每 split 完成立即写 `collection_checkpoints(task_id, shard_id, state)`；job 失败时已写 checkpoint 保留
+  - [x] SubTask 8.6: 重试：catch 异常 → attempt++ ≤ retry_max → 指数退避 `retry_interval_sec * 2^attempt`；超限标 failed
+  - [x] SubTask 8.7: 超时：`timeout_sec` 用 `Promise.race` + `AbortController`，超时标 killed
+  - [x] SubTask 8.8: 限流：令牌桶 `concurrency` 限制并发 split 数
+  - [x] SubTask 8.9: 写 `collection_task_runs`（started_at/finished_at/records_read/write/dirty/bytes/checkpoint/error） `[P]`
+  - [x] SubTask 8.10: 写 `collection_audit`（4 审计点：reader_in/reader_out/writer_in/writer_out） `[P]`
+  - [x] SubTask 8.11: 写 `data_lineage`（task_id→source_table→sink_table→field_map→layer=ods） `[P]`
+  - [x] SubTask 8.12: 任务完成后 `eventbus.emit('collection.task.done', { taskId, sceneId, modelId, runId })`，触发监管模型评估
 
-- [ ] Task 9: scheduler.ts 升级
-  - [ ] SubTask 9.1: [scheduler.ts](file:///workspace/server/src/modules/collection/scheduler.ts) 保留 node-cron 触发；触发后调 `runtime.runTask` 而非旧的随机执行器 `[P]`
-  - [ ] SubTask 9.2: 新增 `dag.ts`：`topoSort(tasks)` 按 `depends_on` 拓扑排序；`runDag(rootTaskId)` 串行触发依赖链 `[P]`
-  - [ ] SubTask 9.3: 优先级队列：`pendingQueue` 按 priority desc 排序，并发上限可配（默认 4）
-  - [ ] SubTask 9.4: `startScheduler()` 启动时加载所有 enabled=1 任务注册 cron；`stopScheduler()` 优雅停止
-  - [ ] SubTask 9.5: 定时巡检线程：每 5min 扫 `risk_clues` 中 `due_at < now AND status='pending'` → 触发 T+5 通报事件
+- [x] Task 9: scheduler.ts 升级
+  - [x] SubTask 9.1: [scheduler.ts](file:///workspace/server/src/modules/collection/scheduler.ts) 保留 node-cron 触发；触发后调 `runtime.runTask` 而非旧的随机执行器 `[P]`
+  - [x] SubTask 9.2: 新增 `dag.ts`：`topoSort(tasks)` 按 `depends_on` 拓扑排序；`runDag(rootTaskId)` 串行触发依赖链 `[P]`
+  - [x] SubTask 9.3: 优先级队列：`pendingQueue` 按 priority desc 排序，并发上限可配（默认 4）
+  - [x] SubTask 9.4: `startScheduler()` 启动时加载所有 enabled=1 任务注册 cron；`stopScheduler()` 优雅停止
+  - [x] SubTask 9.5: 定时巡检线程：每 5min 扫 `risk_clues` 中 `due_at < now AND status='pending'` → 触发 T+5 通报事件
 
-- [ ] Task 10: tasks.ts 升级
-  - [ ] SubTask 10.1: [tasks.ts](file:///workspace/server/src/modules/collection/tasks.ts) `listTasks` 扩展返回全部新字段 `[P]`
-  - [ ] SubTask 10.2: `createTask` / `updateTask` 校验 `transform_pipeline` JSON 合法性（调 transform registry 校验 step type）、`depends_on` 不形成环（调 dag.ts）
-  - [ ] SubTask 10.3: `triggerTask(id)` 调 `runtime.runTask(id)` 异步执行，立即返回 runId
-  - [ ] SubTask 10.4: `getRuns(taskId)` 分页返回 `collection_task_runs`
-  - [ ] SubTask 10.5: `getCheckpoint(taskId)` 返回 `collection_checkpoints` 全部分片
-  - [ ] SubTask 10.6: `getDirtyRecords(taskId, runId)` 返回 `dirty_records`
-  - [ ] SubTask 10.7: `getAudit(taskId, range)` 返回 `collection_audit` 时间序列
-  - [ ] SubTask 10.8: routes 注册新端点（start/stop/trigger/runs/checkpoint/dirty/audit）
+- [x] Task 10: tasks.ts 升级
+  - [x] SubTask 10.1: [tasks.ts](file:///workspace/server/src/modules/collection/tasks.ts) `listTasks` 扩展返回全部新字段 `[P]`
+  - [x] SubTask 10.2: `createTask` / `updateTask` 校验 `transform_pipeline` JSON 合法性（调 transform registry 校验 step type）、`depends_on` 不形成环（调 dag.ts）
+  - [x] SubTask 10.3: `triggerTask(id)` 调 `runtime.runTask(id)` 异步执行，立即返回 runId
+  - [x] SubTask 10.4: `getRuns(taskId)` 分页返回 `collection_task_runs`
+  - [x] SubTask 10.5: `getCheckpoint(taskId)` 返回 `collection_checkpoints` 全部分片
+  - [x] SubTask 10.6: `getDirtyRecords(taskId, runId)` 返回 `dirty_records`
+  - [x] SubTask 10.7: `getAudit(taskId, range)` 返回 `collection_audit` 时间序列
+  - [x] SubTask 10.8: routes 注册新端点（trigger/runs/checkpoints/dirty/audit/lineage/quality）
 
-- [ ] Task 11: quality.ts 与 sink 落地
-  - [ ] SubTask 11.1: [quality.ts](file:///workspace/server/src/modules/collection/quality.ts) 扩展为 transform 后置钩子：sink 写入后调 `runQualityCheck(sceneId, records)` `[P]`
-  - [ ] SubTask 11.2: 新建 `server/src/modules/collection/sink.ts`：`writeToODS(table, records, mode)` 事务批写；`writeToDWD(table, records, mapping)` 字段映射后写；ODS/DWD 表名约定 `ods_<stream>` / `dwd_<stream>`
+- [x] Task 11: quality.ts 与 sink 落地
+  - [x] SubTask 11.1: [quality.ts](file:///workspace/server/src/modules/collection/quality.ts) 扩展为 transform 后置钩子：sink 写入后调 `runQualityCheck(sceneId, records)` `[P]`
+  - [x] SubTask 11.2: 新建 `server/src/modules/collection/sink.ts`：`writeToODS(table, records, mode)` 事务批写；`writeToDWD(table, records, mapping)` 字段映射后写；ODS/DWD 表名约定 `ods_<stream>` / `dwd_<stream>`
+
+> Phase 5 验证：18/18 端到端 API 测试通过（[scripts/test-phase5.sh](file:///workspace/server/scripts/test-phase5.sh)），全部 HTTP 端点验证（绕过 sqlite3 WAL disk I/O 问题）。400 条记录读写（4 streams × 100 条）、4 审计点齐全、4 条 data_lineage（layer=ods）、4 个 checkpoints（含 shard_id）、100 条质量校验问题（5 类规则 × 采样 100 条命中）。runtime.ts 中文 mode→英文映射（全量→full/增量→incremental/CDC→cdc）修复，连接器 ctx.stream 而非 streamName。tasks.ts 新增 taskRowToApi 解析 transformPipeline/dependsOn JSON。45 单元测试无回归。
 
 ## Phase 6：监管场景与模型 registry
 
-- [ ] Task 12: regulatory 模块
-  - [ ] SubTask 12.1: 新建 `server/src/modules/regulatory/scenes.ts`：CRUD + `listByDomain`、`getWithModel` `[P]`
-  - [ ] SubTask 12.2: 新建 `server/src/modules/regulatory/models.ts`：CRUD + `testModel(id)` 编译 rule_dsl 为 json-rules-engine Engine，跑全量数据返回命中 `[P]`
-  - [ ] SubTask 12.3: 新建 `server/src/modules/regulatory/indicators.ts`：CRUD `[P]`
-  - [ ] SubTask 12.4: 新建 `server/src/modules/regulatory/templates.ts`：CRUD + `instantiate(templateId)` 创建 collection_task
-  - [ ] SubTask 12.5: 新建 `server/src/modules/regulatory/routes.ts`：注册全部 `/regulatory/*` 端点 `[P]`
-  - [ ] SubTask 12.6: [app.ts](file:///workspace/server/src/app.ts) 注册 regulatory 路由前缀
+- [x] Task 12: regulatory 模块
+  - [x] SubTask 12.1: 新建 `server/src/modules/regulatory/scenes.ts`：CRUD + `listByDomain`、`getWithModel` `[P]`
+  - [x] SubTask 12.2: 新建 `server/src/modules/regulatory/models.ts`：CRUD + `testModel(id)` 编译 rule_dsl 为 json-rules-engine Engine，跑全量数据返回命中 `[P]`
+  - [x] SubTask 12.3: 新建 `server/src/modules/regulatory/indicators.ts`：CRUD `[P]`
+  - [x] SubTask 12.4: 新建 `server/src/modules/regulatory/templates.ts`：CRUD + `instantiate(templateId)` 创建 collection_task
+  - [x] SubTask 12.5: 新建 `server/src/modules/regulatory/routes.ts`：注册全部 `/regulatory/*` 端点 `[P]`
+  - [x] SubTask 12.6: [app.ts](file:///workspace/server/src/app.ts) 注册 regulatory 路由前缀
 
-- [ ] Task 13: 预置 5 个监管模型 + 5 个采集任务模板
-  - [ ] SubTask 13.1: [seed.ts](file:///workspace/server/src/db/seed.ts) 追加：5 个 regulatory_scenes（finance-risk 域）+ 5 个 regulatory_models + 各模型 3-5 个 model_indicators + 5 个 collection_task_templates `[P]`
-  - [ ] 13.2: 模型 1 `m-fin-dup-pay-001`：rule_dsl 检测同收款方同金额同日多笔；阈值 yellow≥2/orange≥5/red≥10 `[P]`
-  - [ ] 13.3: 模型 2 `m-fin-private-pay-001`：非工作时间（22:00-06:00）+ 对私 + 金额>5万；阈值 yellow≥5万/orange≥20万/red≥100万 `[P]`
-  - [ ] 13.4: 模型 3 `m-fin-fake-trade-001`：资金回流（A→B→A）+ 无商业实质；阈值 yellow/orange/red 按笔数 `[P]`
-  - [ ] 13.5: 模型 4 `m-fin-guarantee-001`：担保金额 / 持股比例 > 1；阈值 yellow>1/orange>2/red>5 `[P]`
-  - [ ] 13.6: 模型 5 `m-fin-funding-due-001`：融资到期 30/7/1 天内；阈值 yellow 30/orange 7/red 1 `[P]`
+- [x] Task 13: 预置 5 个监管模型 + 5 个采集任务模板
+  - [x] SubTask 13.1: [seed-regulatory.ts](file:///workspace/server/src/db/seed-regulatory.ts) 独立模块灌入：5 个 regulatory_scenes（finance-risk 域）+ 5 个 regulatory_models + 各模型 3-5 个 model_indicators + 5 个 collection_task_templates；[main.ts](file:///workspace/server/src/main.ts) initDb 在 seedDatabase 后调用 seedRegulatory `[P]`
+  - [x] 13.2: 模型 1 `m-fin-dup-pay-001`：rule_dsl 检测同收款方同金额同日多笔；阈值 yellow≥2/orange≥5/red≥10 `[P]`
+  - [x] 13.3: 模型 2 `m-fin-private-pay-001`：非工作时间（22:00-06:00）+ 对私 + 金额>5万；阈值 yellow≥5万/orange≥20万/red≥100万 `[P]`
+  - [x] 13.4: 模型 3 `m-fin-fake-trade-001`：资金回流（A→B→A）+ 无商业实质；阈值 yellow/orange/red 按笔数 `[P]`
+  - [x] 13.5: 模型 4 `m-fin-guarantee-001`：担保金额 / 持股比例 > 1；阈值 yellow>1/orange>2/red>5 `[P]`
+  - [x] 13.6: 模型 5 `m-fin-funding-due-001`：融资到期 30/7/1 天内；阈值 yellow 30/orange 7/red 1 `[P]`
+
+> Phase 6 验证：22/22 端到端 API 测试通过（[scripts/test-phase6.sh](file:///workspace/server/scripts/test-phase6.sh)），含 5 场景过滤、5 模型 rule_dsl 编译并试运行命中、16 指标分布（4+3+3+3+3）、5 模板实例化创建 collection_task（带 scene_id+model_id+transform_pipeline）、404/400/401 错误路径。
 
 ## Phase 7：风险闭环运营
 

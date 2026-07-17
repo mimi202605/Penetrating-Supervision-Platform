@@ -7,8 +7,11 @@ import { config } from "./config.js";
 import { buildApp } from "./app.js";
 import { db, getDb, initSchema } from "./db/index.js";
 import { seedDatabase } from "./db/seed.js";
+import { seedRegulatory } from "./db/seed-regulatory.js";
 import { eventBus, registerEventBusConsumers } from "./modules/platform/eventbus.js";
 import { registerDispatchListeners } from "./modules/dispatch/listeners.js";
+import { registerRiskListeners } from "./modules/risk/listeners.js";
+import { registerRegulatoryModelListener } from "./modules/monitoring/rule-engine.js";
 import { registerCollectionScheduler, stopScheduler } from "./modules/collection/scheduler.js";
 import { loadEnabledPolicies } from "./modules/ai/sanitizer-policies.js";
 import { incCollectionRun } from "./health.js";
@@ -20,6 +23,7 @@ async function initDb(): Promise<void> {
   await initSchema();
   if (config.seedOnBoot) {
     seedDatabase();
+    seedRegulatory();
   }
 }
 
@@ -65,6 +69,12 @@ async function start(): Promise<void> {
 
     // 4. 注册调度指挥中心事件监听（high 风险预警自动派单）
     registerDispatchListeners();
+
+    // 4b. 注册风险闭环事件监听（V2 Task 14：monitoring.rule.hit → risk_clues → 自动派单 → T+5 通报）
+    registerRiskListeners();
+
+    // 4c. 注册监管模型评估桥接（V2 Task 16：collection.task.done → evaluateRegulatoryModel → monitoring.rule.hit）
+    registerRegulatoryModelListener();
 
     // 5. 注册心跳 cron（采集调度计数）
     const cronTasks = registerCronJobs();

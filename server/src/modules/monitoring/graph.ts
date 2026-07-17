@@ -1,7 +1,7 @@
 // 智慧监督中心 - 关系图谱：账户-交易对手-组织-人员四级关联
 // 启动时加载 graph_nodes + graph_edges 到内存邻接表，BFS 支持 depth 跳内查询
 import type { FastifyInstance, FastifyPluginCallback, FastifyReply, FastifyRequest } from "fastify";
-import { execute, queryAll } from "../../db/index.js";
+import { queryAll, execute as dbExecute } from "../../db/index.js";
 import { logger } from "../../utils/logger.js";
 
 /** 图谱节点（对齐 GraphNode 契约） */
@@ -33,28 +33,13 @@ let allEdgesCache: GraphEdge[] = [];
 /** 公开节点/边类型（供 relationship-extract Transform 调用） */
 export type { GraphNode, GraphEdge };
 
-/** 向图谱添加节点（同步写入 DB + 内存，幂等） */
-export function addNode(node: GraphNode): void {
-  ensureGraph();
-  if (nodeMap.has(node.id)) return;
-  nodeMap.set(node, node) ; // 占位避免重复
-  nodeMap.set(node.id, node);
-  // 写库（IF NOT EXISTS 等价）
-  try {
-    const { execute } = await import("../../db/index.js");
-  } catch { /* 静默 */ }
-}
-
-/** 同步版 addNode（直接调用 better-sqlite3，避免 async） */
+/** 同步向图谱添加节点（写库 + 内存，幂等） */
 export function addNodeSync(node: GraphNode): void {
   ensureGraph();
   if (nodeMap.has(node.id)) return;
   nodeMap.set(node.id, node);
   try {
-    // 动态 require 避免循环依赖：graph.ts 已在 monitoring 模块下，db/index.js 无环
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const db = require("../../db/index.js");
-    db.execute(
+    dbExecute(
       "INSERT OR IGNORE INTO graph_nodes (id, label, type, meta) VALUES (?, ?, ?, ?)",
       [node.id, node.label, node.type, node.meta ?? null],
     );
@@ -63,21 +48,17 @@ export function addNodeSync(node: GraphNode): void {
   }
 }
 
-/** 向图谱添加边（同步写入 DB + 内存，幂等） */
+/** 同步向图谱添加边（写库 + 内存，幂等） */
 export function addEdgeSync(edge: GraphEdge): void {
   ensureGraph();
-  // 写库
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const db = require("../../db/index.js");
-    db.execute(
+    dbExecute(
       "INSERT OR IGNORE INTO graph_edges (source, target, label, weight) VALUES (?, ?, ?, ?)",
       [edge.source, edge.target, edge.label ?? null, edge.weight ?? 1],
     );
   } catch (err) {
     logger.warn({ err: (err as Error).message }, "addEdgeSync 写库失败（仅内存生效）");
   }
-  // 内存邻接表更新
   const a = adjacency.get(edge.source) || [];
   if (!a.some((x) => x.neighbor === edge.target && x.edge.label === edge.label)) {
     a.push({ edge, neighbor: edge.target });

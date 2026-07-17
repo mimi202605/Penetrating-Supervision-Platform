@@ -58,8 +58,11 @@ function castValue(
 ): unknown {
   if (v === null || v === undefined) return v;
   switch (target) {
-    case "number":
-      return Number(v);
+    case "number": {
+      const n = Number(v);
+      if (Number.isNaN(n)) throw new Error(`无法转为 number: ${String(v)}`);
+      return n;
+    }
     case "decimal": {
       const n = Number(v);
       if (Number.isNaN(n)) throw new Error(`无法转为 decimal: ${String(v)}`);
@@ -158,14 +161,15 @@ export const filterHandler: TransformHandler = {
   init(config) {
     const expr = String(config.expr || "");
     if (!expr) throw new TransformStepError("filter", "filter 缺少 expr 配置", {});
-    const parser = new Parser();
-    const compiled = parser.parse(expr);
-    return { compiled };
+    const compiled = new Parser().parse(expr);
+    return {
+      evaluate: (r: Record<string, unknown>) => compiled.evaluate(r as never) as unknown,
+    };
   },
   apply(record, state) {
-    const compiled = state.compiled as { evaluate: (ctx: Record<string, unknown>) => unknown };
+    const evaluate = state.evaluate as (r: Record<string, unknown>) => unknown;
     try {
-      const ok = compiled.evaluate(record);
+      const ok = evaluate(record);
       return ok ? record : null;
     } catch (err) {
       throw new TransformStepError("filter", `filter 表达式求值失败: ${(err as Error).message}`, record);
