@@ -146,19 +146,21 @@
 
 ## Phase 8：四级穿透与联查
 
-- [ ] Task 17: penetration 升级
-  - [ ] SubTask 17.1: [penetration.ts](file:///workspace/server/src/modules/monitoring/penetration.ts) 新增 `drillADS(indicatorId)` → 返回关联 DWS blockIds
-  - [ ] SubTask 17.2: `drillDWS(blockId)` → 返回关联 DWD detailIds
-  - [ ] SubTask 17.3: `drillDWD(detailId)` → 返回关联 ODS docIds
-  - [ ] SubTask 17.4: `drillODS(docId)` → 返回原始单据（含 file-csv 解析的原文） `[P]`
-  - [ ] SubTask 17.5: `getLineageGraph(sceneId)` → 返回 `{nodes, edges}` 供前端图谱渲染（复用 [graph.ts](file:///workspace/server/src/modules/monitoring/graph.ts) 结构） `[P]`
-  - [ ] SubTask 17.6: routes 注册 `/penetration/ads/:id`、`/dws/:id`、`/dwd/:id`、`/ods/:id`、`/lineage` `[P]`
-  - [ ] SubTask 17.7: 现有 `/monitoring/penetration/tree` 保持不变
+- [x] Task 17: penetration 升级
+  - [x] SubTask 17.1: [penetration.ts](file:///workspace/server/src/modules/monitoring/penetration.ts) 新增 `drillADS(indicatorId)` → 返回关联 DWS blockIds（基于 model_indicators → regulatory_models.scene_id → data_lineage.sink_table 关联）
+  - [x] SubTask 17.2: `drillDWS(blockId)` → 返回关联 DWD detailIds（通过 task_id 关联 ods_generic，因 ods_generic.stream 与 sink_table 命名不一定相等）
+  - [x] SubTask 17.3: `drillDWD(detailId)` → 返回关联 ODS docIds（detailId = ods_generic.id，返回 record_json 解析后的原始记录）
+  - [x] SubTask 17.4: `drillODS(docId)` → 返回原始单据（含 record_json 解析的原文） `[P]`
+  - [x] SubTask 17.5: `getLineageGraph(sceneId)` → 返回 `{nodes, edges}` 供前端图谱渲染（ADS/DWS/DWD 三类节点 + aggregates/contains 边） `[P]`
+  - [x] SubTask 17.6: routes 注册 `/penetration/ads/:id`、`/dws/:id`、`/dwd/:id`、`/ods/:id`、`/lineage` `[P]`
+  - [x] SubTask 17.7: 现有 `/monitoring/penetration/tree` 保持不变（T24/T25 验证 200）
 
-- [ ] Task 18: linkage 联查
-  - [ ] SubTask 18.1: 新建 `server/src/modules/regulatory/linkage.ts`：`listRules(sceneId?)` / `executeRule(id, entryEntity)` 按 drill_path 逐级调 penetration drill 方法 `[P]`
-  - [ ] SubTask 18.2: [seed.ts](file:///workspace/server/src/db/seed.ts) 预置 10 条 linkage_rules（资金管理 5 + 投资管理 3 + 合同 2）
-  - [ ] SubTask 18.3: routes 注册 `/linkage/rules`、`/linkage/rules/:id/execute` `[P]`
+- [x] Task 18: linkage 联查
+  - [x] SubTask 18.1: 新建 `server/src/modules/regulatory/linkage.ts`：`listRules(sceneId?)` / `getRule(id)` / `executeRule(id, entryEntity)` 按 drill_path 逐级调 penetration drill 方法 `[P]`
+  - [x] SubTask 18.2: [seed-regulatory.ts](file:///workspace/server/src/db/seed-regulatory.ts) 预置 10 条 linkage_rules（资金管理 5 + 投资管理 3 + 合同 2，复用 finance-risk 场景）
+  - [x] SubTask 18.3: routes 注册 `/linkage/rules`、`/linkage/rules/:id`、`/linkage/rules/:id/execute` `[P]`
+
+> Phase 8 验证：29/29 端到端 API 测试通过（[scripts/test-phase8.sh](file:///workspace/server/scripts/test-phase8.sh)），9 部分覆盖：联查规则列表/过滤/详情、触发采集任务写入 data_lineage+ods_generic、四级下钻 ads→dws→dwd→ods（含 task_id 关联修复 stream/sink_table 命名不一致问题）、lineage 图谱（ADS/DWS/DWD 节点 + aggregates/contains 边）、linkage 完整四级穿透链执行、错误路径 404/400/非整数、向后兼容（/monitoring/penetration/tree + /search 仍 200）、未鉴权 401。关键修复：drillDWS 与 getLineageGraph 通过 task_id 关联 ods_generic（而非 stream=sink_table），因 runtime 写入 ods_generic.stream 为原始 stream 名（如 payment_flow），而 data_lineage.sink_table 为 sink_target 或 ods_<stream>（如 ods_payment_flow），两者命名不一致。
 
 ## Phase 9：AI 智能体编排
 
