@@ -16,14 +16,14 @@ interface OrgSeed {
 }
 const ORGS: OrgSeed[] = [
   // 来自穿透树
-  { id: "group", name: "新兴际华集团", level: 1, parent_id: null, type: "集团总部" },
+  { id: "group", name: "中央企业集团", level: 1, parent_id: null, type: "集团总部" },
   { id: "xieling-zhuguan", name: "新兴铸管股份", level: 2, parent_id: "group", type: "二级单位" },
   { id: "jihua-touzi", name: "际华投资公司", level: 2, parent_id: "group", type: "二级单位" },
   { id: "xinxing-zhonggong", name: "新兴重工集团", level: 2, parent_id: "group", type: "二级单位" },
   { id: "xieling-zhuguan-1", name: "新兴铸管邯郸基地", level: 3, parent_id: "xieling-zhuguan", type: "三级单位" },
   { id: "jihua-touzi-1", name: "际华新能源", level: 3, parent_id: "jihua-touzi", type: "三级单位" },
   // 来自图谱 org 节点
-  { id: "org-1", name: "新兴际华集团", level: 1, parent_id: null, type: "集团总部" },
+  { id: "org-1", name: "中央企业集团", level: 1, parent_id: null, type: "集团总部" },
   { id: "org-2", name: "新兴铸管股份", level: 2, parent_id: "org-1", type: "二级单位" },
   { id: "org-3", name: "际华投资公司", level: 2, parent_id: "org-1", type: "二级单位" },
 ];
@@ -64,7 +64,7 @@ interface GraphNodeSeed {
   meta: string | null;
 }
 const GRAPH_NODES: GraphNodeSeed[] = [
-  { id: "org-1", label: "新兴际华集团", type: "org", meta: "集团总部" },
+  { id: "org-1", label: "中央企业集团", type: "org", meta: "集团总部" },
   { id: "org-2", label: "新兴铸管股份", type: "org", meta: "二级单位" },
   { id: "org-3", label: "际华投资公司", type: "org", meta: "二级单位" },
   { id: "acc-1", label: "新兴铸管基本户", type: "account", meta: "6228****1234" },
@@ -193,14 +193,14 @@ const RISK_WARNINGS: RiskWarningSeed[] = [
     title: "海外子公司违规关联交易",
     domain: "境外单位领域",
     level: "high",
-    subject: "新兴际华国际",
+    subject: "中央企业国际",
     rule: "关联交易规则R-108",
     triggered_at: "2026-07-16 08:45",
     status: "processing",
     clue: "境外子公司与高管直系亲属控股企业发生 1,200 万美元交易，未履行关联交易审批程序。",
     related_order_id: "WO20260715-008",
     raw: [
-      { label: "交易主体", value: "新兴际华国际（香港）有限公司" },
+      { label: "交易主体", value: "中央企业国际（香港）有限公司" },
       { label: "对手方", value: "Everwin Holdings Ltd（关联自然人控股）" },
       { label: "交易金额", value: "1,200 万美元" },
       { label: "审批状态", value: "未走关联交易审批流" },

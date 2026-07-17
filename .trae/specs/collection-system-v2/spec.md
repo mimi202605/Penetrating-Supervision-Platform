@@ -1,7 +1,7 @@
 # 数据源管理与采集任务系统 V2 Spec
 
 > change-id: `collection-system-v2`
-> 对齐文档：`新兴际华穿透式监管方案交流V0.1-202607.pdf`、`大型央企集团穿透式监管平台（一平台三中心）5年落地实操方案.md`、`.trae/specs/build-supervision-backend/spec.md`
+> 对齐文档：`中央企业穿透式监管方案交流V0.1-202607.pdf`、`大型央企集团穿透式监管平台（一平台三中心）5年落地实操方案.md`、`.trae/specs/build-supervision-backend/spec.md`
 > 编制日期：2026-07-17
 
 ---
