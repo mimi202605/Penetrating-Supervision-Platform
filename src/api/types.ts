@@ -123,3 +123,88 @@ export interface HealthBar {
   value: number;
   color: string;
 }
+
+/* ===================== Task 9 增补：前后台衔接类型 ===================== */
+
+// 登录请求
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+// 登录响应（对齐后端 POST /auth/login 返回结构）
+export interface LoginResponse {
+  token: string;
+  user: {
+    id: string;
+    username: string;
+    role: string;
+    name: string;
+    org_id?: string;
+  };
+}
+
+// 推进工单请求（POST /dispatch/work-orders/:id/advance）
+export interface AdvanceWorkOrderRequest {
+  result?: string;
+}
+
+// 规则试算请求（POST /monitoring/rules/:id/evaluate）
+export interface EvaluateRuleRequest {
+  facts: Record<string, unknown>;
+}
+
+// 审计日志条目（对齐后端 /system/audit transformAuditRow 字段）
+export interface AuditLog {
+  id: string;
+  userId: string;
+  action: string;
+  target: string;
+  ip: string;
+  detail: string;
+  createdAt: string;
+}
+
+// 审计日志分页响应
+export interface AuditLogListResponse {
+  list: AuditLog[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// AI 自然语言查询请求
+export interface AIQueryRequest {
+  query: string;
+}
+
+// AI 自然语言查询响应（已配置/未配置两种形态兼容）
+export interface AIQueryResponse {
+  understood: boolean;
+  intent?: string;
+  suggestedSql?: string;
+  suggestedGraphQuery?: string;
+  content?: string;
+  message?: string;
+  placeholder?: boolean;
+  [key: string]: unknown;
+}
+
+// AI 健康检查响应
+export interface AIHealth {
+  configured: boolean;
+  provider?: string;
+  endpoint?: string;
+  latency?: number | null;
+  [key: string]: unknown;
+}
+
+// 指挥大屏聚合响应（GET /dispatch/dashboard）
+export interface DashboardResponse {
+  kpis: { label: string; value: string; trend?: string; tone?: "up" | "down" }[];
+  heatmap: { area: string; high: number; medium: number; low: number }[];
+  pendingStats: {
+    byNode: Record<string, number>;
+    byOwner: { owner: string; count: number }[];
+  };
+}

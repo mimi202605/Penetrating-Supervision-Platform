@@ -18,6 +18,13 @@ export default defineConfig({
         '**/node_modules/.pnpm/**',
       ],
     },
+    // Task 9：将 /api 请求代理到后端服务（http://localhost:7077），避免跨域
+    proxy: {
+      '/api': {
+        target: 'http://localhost:7077',
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [
     react({
