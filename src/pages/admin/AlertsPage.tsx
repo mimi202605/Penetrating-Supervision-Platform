@@ -82,20 +82,20 @@ export default function AlertsPage() {
 
   async function onConfirm(id: string) {
     try {
-      await api.confirmAlert(id, userName);
+      const updated = await api.confirmAlert(id, userName);
       markAlertRead(id);
+      setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
       showToast("告警已确认", "success");
-      await load();
     } catch {
       showToast("确认失败", "error");
     }
   }
   async function onSilence(id: string) {
     try {
-      await api.silenceAlert(id);
+      const updated = await api.silenceAlert(id);
       silenceAlertLocal(id);
+      setAlerts((prev) => prev.map((a) => (a.id === id ? updated : a)));
       showToast("告警已静默", "success");
-      await load();
       setDetail(null);
     } catch {
       showToast("静默失败", "error");

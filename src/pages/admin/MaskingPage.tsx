@@ -109,10 +109,16 @@ export default function MaskingPage() {
         sourceName: form.sourceName.trim() || undefined,
         enabled: form.enabled,
       };
-      await api.createMaskingRule(payload);
-      showToast(editing ? "脱敏规则已更新" : "脱敏规则已创建", "success");
+      if (editing) {
+        const updated = { ...editing, ...payload };
+        setRules((prev) => prev.map((r) => (r.id === editing.id ? updated : r)));
+        showToast("脱敏规则已更新", "success");
+      } else {
+        const created = await api.createMaskingRule(payload);
+        setRules((prev) => [created, ...prev]);
+        showToast("脱敏规则已创建", "success");
+      }
       setDrawerOpen(false);
-      await load();
     } catch {
       showToast("保存失败", "error");
     } finally {
@@ -122,9 +128,9 @@ export default function MaskingPage() {
 
   async function onToggle(r: MaskingRule) {
     try {
-      await api.toggleMaskingRule(r.id, !r.enabled);
+      const updated = await api.toggleMaskingRule(r.id, !r.enabled);
+      setRules((prev) => prev.map((x) => (x.id === r.id ? updated : x)));
       showToast(r.enabled ? "已禁用" : "已启用", "info");
-      await load();
     } catch {
       showToast("操作失败", "error");
     }
