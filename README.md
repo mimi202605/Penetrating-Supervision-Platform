@@ -4,6 +4,7 @@
 > 演示站点：<https://mimi202605.github.io/Penetrating-Supervision-Platform/>
 
 ---
+<img width="250" height="55" alt="image" src="https://github.com/user-attachments/assets/b1e3266b-156d-4822-b8db-c5c89ea215d8" />
 
 ## 一、平台项目概况
 
