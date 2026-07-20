@@ -91,13 +91,26 @@ async function start(): Promise<void> {
     );
 
     // 8. 优雅退出：停止 cron/采集调度 → 清空事件总线 → 关闭 Fastify → 关闭 DB → 退出
+    // 防重入：用户连按 Ctrl+C 时第二次调用直接退出，避免 closeDb 漏执行
+    let shuttingDown = false;
     const shutdown = async (signal: string) => {
+      if (shuttingDown) {
+        // 第二次信号：强制退出
+        process.exit(1);
+      }
+      shuttingDown = true;
       logger.info({ signal }, "收到退出信号，正在关闭服务");
       cronTasks.forEach((t) => t.stop());
       stopScheduler();
       eventBus.removeAllListeners();
-      await app.close();
-      closeDb();
+      try {
+        await app.close();
+      } catch (err) {
+        logger.warn({ err: (err as Error).message }, "关闭 Fastify 失败");
+      } finally {
+        // 无论 app.close 是否抛错都要关闭 DB，避免连接泄漏
+        closeDb();
+      }
       process.exit(0);
     };
     process.on("SIGINT", () => void shutdown("SIGINT"));

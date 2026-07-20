@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/StatusTag";
 import { api, type RiskFilter } from "@/api";
 import * as mock from "@/mock";
-import type { RiskWarning, RiskLevel, RiskStatus } from "@/api/types";
+import type { RiskWarning, RiskLevel, RiskStatus, WorkOrder } from "@/api/types";
 
 export default function RiskWarningsPage() {
   const [params] = useSearchParams();
@@ -21,31 +21,74 @@ export default function RiskWarningsPage() {
   const [level, setLevel] = useState<RiskLevel | "all">("all");
   const [status, setStatus] = useState<RiskStatus | "all">("all");
   const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [list, setList] = useState<RiskWarning[]>(mock.riskWarnings);
+  const [orders, setOrders] = useState<WorkOrder[]>(mock.workOrders);
   const [selected, setSelected] = useState<RiskWarning | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchMsg, setDispatchMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
-  const filter: RiskFilter = { level, status, keyword };
+  // keyword 防抖 300ms，避免每输入一个字符就触发请求
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(keyword), 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
+  const filter: RiskFilter = { level, status, keyword: debouncedKeyword };
 
   useEffect(() => {
-    api.getRiskWarnings(filter).then(setList);
-  }, [level, status, keyword]);
+    api.getRiskWarnings(filter).then(setList).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level, status, debouncedKeyword]);
 
-  // 通过 URL 参数定位指定风险
+  // 拉取工单列表用于关联展示
   useEffect(() => {
-    if (initialId) {
-      const r = mock.riskWarnings.find((x) => x.id === initialId);
-      if (r) {
-        setSelected(r);
-        setDrawerOpen(true);
-      }
+    api.getWorkOrders().then(setOrders).catch(() => {});
+  }, []);
+
+  // 通过 URL 参数定位指定风险（从已加载 list 中查找，避免 mock/真实环境错配）
+  useEffect(() => {
+    if (!initialId || list.length === 0) return;
+    const r = list.find((x) => x.id === initialId);
+    if (r) {
+      setSelected(r);
+      setDrawerOpen(true);
     }
-  }, [initialId]);
+  }, [initialId, list]);
 
   const relatedOrder = useMemo(() => {
     if (!selected?.relatedOrderId) return null;
-    return mock.workOrders.find((w) => w.id === selected.relatedOrderId) ?? null;
-  }, [selected]);
+    return orders.find((w) => w.id === selected.relatedOrderId) ?? null;
+  }, [selected, orders]);
+
+  /** 派发核查工单：调用后端 createWorkOrder，成功后刷新工单列表与风险列表 */
+  const handleDispatch = async () => {
+    if (!selected || dispatching) return;
+    setDispatching(true);
+    setDispatchMsg(null);
+    try {
+      const wo = await api.createWorkOrder({
+        riskSource: selected.title,
+        riskWarningId: selected.id,
+      });
+      // 把新工单加到 orders 头部，并把当前风险标记为 processing
+      setOrders((prev) => [wo, ...prev]);
+      setList((prev) =>
+        prev.map((r) =>
+          r.id === selected.id ? { ...r, status: "processing", relatedOrderId: wo.id } : r,
+        ),
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, status: "processing", relatedOrderId: wo.id } : prev,
+      );
+      setDispatchMsg({ tone: "success", text: `已派发工单 ${wo.id}` });
+    } catch (err) {
+      setDispatchMsg({ tone: "error", text: `派发失败：${(err as Error).message}` });
+    } finally {
+      setDispatching(false);
+    }
+  };
 
   const columns: Column<RiskWarning>[] = [
     {
@@ -176,13 +219,21 @@ export default function RiskWarningsPage() {
             <button
               type="button"
               className="ds-btn ds-btn-secondary"
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => {
+                setDrawerOpen(false);
+                setDispatchMsg(null);
+              }}
             >
               关闭
             </button>
             {selected?.status === "pending" ? (
-              <button type="button" className="ds-btn ds-btn-primary">
-                派发核查工单
+              <button
+                type="button"
+                className="ds-btn ds-btn-primary"
+                onClick={handleDispatch}
+                disabled={dispatching}
+              >
+                {dispatching ? "派发中..." : "派发核查工单"}
               </button>
             ) : null}
           </>
@@ -204,6 +255,26 @@ export default function RiskWarningsPage() {
                 <StatusTag tone="info">{selected.domain}</StatusTag>
               </div>
             </div>
+
+            {/* 派发反馈提示 */}
+            {dispatchMsg ? (
+              <div
+                className="text-body px-3 py-2 rounded-sm"
+                style={{
+                  background:
+                    dispatchMsg.tone === "success"
+                      ? "var(--color-success-container, rgba(34,197,94,0.12))"
+                      : "var(--color-error-container, rgba(220,38,38,0.12))",
+                  color:
+                    dispatchMsg.tone === "success"
+                      ? "var(--color-success, #16a34a)"
+                      : "var(--color-error, #dc2626)",
+                }}
+                role="alert"
+              >
+                {dispatchMsg.text}
+              </div>
+            ) : null}
 
             {/* 字段 */}
             <div className="grid grid-cols-2 gap-3">

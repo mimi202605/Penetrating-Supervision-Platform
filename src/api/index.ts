@@ -89,7 +89,21 @@ const useMock = (): boolean =>
 const apiBase = (): string =>
   (import.meta.env.VITE_API_BASE as string | undefined) || "/api/v1";
 
-/** 通用 fetch 封装：拼 url、带 Authorization、处理 JSON、非 2xx 抛错、401 清 token */
+/** 401 处理：清理 token 并跳登录页（防重入，避免并发请求触发多次跳转） */
+let isRedirectingToLogin = false;
+function handle401(): void {
+  localStorage.removeItem("supervision_token");
+  if (isRedirectingToLogin) return;
+  isRedirectingToLogin = true;
+  // 仅在非登录页时跳转，避免登录页 401 死循环
+  if (!window.location.hash.includes("/login")) {
+    const next = encodeURIComponent(window.location.hash.slice(1) || "/");
+    window.location.hash = `/login?next=${next}`;
+  }
+  setTimeout(() => { isRedirectingToLogin = false; }, 1000);
+}
+
+/** 通用 fetch 封装：拼 url、带 Authorization、处理 JSON、非 2xx 抛错、401 清 token 跳登录 */
 async function request<T>(
   path: string,
   options: {
@@ -123,16 +137,27 @@ async function request<T>(
     payload = JSON.stringify(body);
   }
 
-  const res = await fetch(url, {
-    method,
-    headers: finalHeaders,
-    body: payload,
-    signal,
-  });
+  // 网络错误统一包装为 ApiError，避免 TypeError 直接暴露给调用方
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: finalHeaders,
+      body: payload,
+      signal,
+    });
+  } catch (err) {
+    const error = new Error(
+      (err as Error)?.message || "网络异常，请检查网络连接或后端服务是否可用",
+    ) as ApiError;
+    error.statusCode = 0;
+    error.response = null;
+    throw error;
+  }
 
-  // 401：清理 token（可选跳登录；此处仅清理，避免对路由产生副作用）
+  // 401：清理 token 并跳登录页
   if (res.status === 401) {
-    localStorage.removeItem("supervision_token");
+    handle401();
   }
 
   // 解析响应体
@@ -211,16 +236,85 @@ export const api = {
     useMock()
       ? delay(mock.workOrders as WorkOrder[])
       : request<WorkOrder[]>("/dispatch/work-orders"),
+  createWorkOrder: (body: CreateWorkOrderRequest): Promise<WorkOrder> =>
+    useMock()
+      ? delay({
+          id: `WO-MOCK-${Date.now()}`,
+          riskSource: body.riskSource,
+          owner: body.owner ?? "未分配",
+          currentNode: "verify",
+          progress: 0,
+          status: "processing",
+          riskWarningId: body.riskWarningId ?? null,
+          createdAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+          updatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+        } as WorkOrder)
+      : request<WorkOrder>("/dispatch/work-orders", { method: "POST", body }),
 
   /* ============ 数据采集 ============ */
   getCollectionTasks: (): Promise<CollectionTask[]> =>
     useMock()
       ? delay(mock.collectionTasks)
       : request<CollectionTask[]>("/collection/tasks"),
+  createCollectionTask: (body: {
+    name: string;
+    source?: string;
+    mode?: string;
+    schedule?: string;
+    sourceId?: string;
+    sinkType?: string;
+    sinkTarget?: string;
+    transformPipeline?: unknown[];
+    concurrency?: number;
+    retryMax?: number;
+    retryIntervalSec?: number;
+    timeoutSec?: number;
+    priority?: number;
+    dependsOn?: string[];
+    enabled?: number;
+    sceneId?: string;
+    modelId?: string;
+  }): Promise<CollectionTask> =>
+    useMock()
+      ? delay({
+          id: `T-MOCK-${Date.now()}`,
+          name: body.name,
+          source: (body.source as CollectionTask["source"]) || "其他",
+          mode: (body.mode as CollectionTask["mode"]) || "增量",
+          schedule: body.schedule || "*/30 * * * *",
+          lastStatus: "成功",
+          throughput: "—",
+          lastRun: new Date().toISOString().slice(0, 16).replace("T", " "),
+        } as CollectionTask)
+      : request<CollectionTask>("/collection/tasks", { method: "POST", body }),
   getDataSources: (): Promise<DataSource[]> =>
     useMock()
       ? delay(mock.dataSources)
       : request<DataSource[]>("/collection/sources"),
+  createDataSource: (body: {
+    name: string;
+    connectorType?: string;
+    type?: string;
+    status?: string;
+    records?: string;
+    updateFreq?: string;
+    owner?: string;
+    endpoint?: string;
+    authType?: string;
+    sceneId?: string;
+    config?: Record<string, unknown>;
+  }): Promise<DataSource> =>
+    useMock()
+      ? delay({
+          id: `DS-MOCK-${Date.now()}`,
+          name: body.name,
+          type: (body.type as DataSource["type"]) || "REST API",
+          status: "online",
+          records: "0 条",
+          updateFreq: body.updateFreq || "实时",
+          owner: body.owner || "—",
+        } as DataSource)
+      : request<DataSource>("/collection/sources", { method: "POST", body }),
   getCollectionTrend: (): Promise<TrendPoint[]> =>
     useMock()
       ? delay(mock.collectionTrend)
@@ -265,6 +359,14 @@ export const api = {
     useMock()
       ? delay(mock.riskHeatmap)
       : request<DashboardResponse>("/dispatch/dashboard").then((r) => r.heatmap),
+  getDashboard: (): Promise<DashboardResponse> =>
+    useMock()
+      ? delay({
+          kpis: mock.bigScreenKpis,
+          heatmap: mock.riskHeatmap,
+          pendingStats: { byNode: {}, byOwner: [] },
+        })
+      : request<DashboardResponse>("/dispatch/dashboard"),
 
   /* ============ 穿透查询 ============ */
   getPenetrationTree: (): Promise<typeof mock.penetrationTree> =>
@@ -304,17 +406,6 @@ export const api = {
           method: "POST",
           body: { result } as AdvanceWorkOrderRequest,
         }),
-  createWorkOrder: (payload: CreateWorkOrderRequest): Promise<WorkOrder> =>
-    useMock()
-      ? delay({
-          id: payload.id || `WO-${Date.now()}`,
-          riskSource: payload.riskSource,
-          owner: payload.owner || "",
-          currentNode: "verify",
-          progress: 20,
-          status: "processing",
-        } as WorkOrder)
-      : request<WorkOrder>("/dispatch/work-orders", { method: "POST", body: payload }),
 
   /* ============ 新增：规则引擎 ============ */
   evaluateRule: (ruleId: string, facts: Record<string, unknown>): Promise<unknown> =>

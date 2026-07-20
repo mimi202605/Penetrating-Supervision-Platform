@@ -76,9 +76,9 @@ function buildAccountSubtree(orgId: string): PenetrationNode[] {
 
 /**
  * 构建穿透树：从 organizations 递归 children，叶子组织挂账户/流水子树
- * 返回结构与 mock penetrationTree 完全一致
+ * 返回结构与 mock penetrationTree 完全一致；组织表为空时返回 null
  */
-export function buildPenetrationTree(): PenetrationNode {
+export function buildPenetrationTree(): PenetrationNode | null {
   const orgs = queryAll<OrgRow>("SELECT id, name, level, parent_id, type FROM organizations");
   // 按 parent_id 分组（保留插入序以保证与 mock 子节点顺序一致）
   const byParent = new Map<string | null, OrgRow[]>();
@@ -94,6 +94,11 @@ export function buildPenetrationTree(): PenetrationNode {
     orgs.find((o) => o.id === "group") ||
     orgs.find((o) => o.level === 1 && o.parent_id === null) ||
     orgs[0];
+
+  // 组织表为空时返回 null，由路由层兜底 503，避免 buildNode(undefined) 解引用崩溃
+  if (!root) {
+    return null;
+  }
 
   const buildNode = (org: OrgRow, visited: Set<string>): PenetrationNode => {
     // 防止 organizations.parent_id 出现环（自指/互指/更长环）导致无限递归栈溢出。
@@ -147,6 +152,14 @@ export const registerPenetration: FastifyPluginCallback = (app: FastifyInstance,
     async (_req: FastifyRequest, reply: FastifyReply) => {
       try {
         const tree = buildPenetrationTree();
+        if (!tree) {
+          reply.code(503).send({
+            error: "no_organizations",
+            message: "组织数据未初始化，无法构建穿透树",
+            statusCode: 503,
+          });
+          return;
+        }
         reply.send(tree);
       } catch (err) {
         logger.error({ err: (err as Error).message }, "构建穿透树失败");

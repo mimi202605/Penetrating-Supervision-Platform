@@ -5,7 +5,7 @@ import { execute, queryAll, queryOne, transaction } from "../../db/index.js";
 import { camelize } from "../../utils/case.js";
 import { eventBus } from "../platform/eventbus.js";
 import { logger } from "../../utils/logger.js";
-import { PROGRESS_BY_NODE } from "../dispatch/workflow.js";
+import { PROGRESS_BY_NODE, advanceWorkOrder } from "../dispatch/workflow.js";
 import { incRiskCluesPending, decRiskCluesPending } from "../../health.js";
 
 /** 线索状态 */
@@ -241,14 +241,21 @@ export function closeClue(
       "UPDATE risk_clues SET status = 'closed' WHERE id = ?",
       [clueId],
     );
-    if (clue.work_order_id) {
-      const now = nowFormatted();
-      execute(
-        "UPDATE work_orders SET current_node = 'archive', progress = 100, status = 'archived', updated_at = ? WHERE id = ?",
-        [now, clue.work_order_id],
-      );
-    }
   });
+  // 工单推进走状态机 advanceWorkOrder，确保 risk_warnings 联动置 resolved、
+  // workorder.advanced 事件 emit、审计落库；避免直接 UPDATE archive 绕过状态机
+  if (clue.work_order_id) {
+    // 循环推进到 archive（advanceWorkOrder 每次推进一步）
+    // 安全上限 10 次防止异常节点陷入死循环
+    let safety = 10;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    let result: { ok: boolean; message: string; toNode?: string };
+    do {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      result = advanceWorkOrder(clue.work_order_id, "线索关闭，自动归档", actor ?? undefined);
+      safety -= 1;
+    } while (result.ok && result.toNode !== "archive" && safety > 0);
+  }
   // 触发规则反哺事件
   eventBus.emit("risk.clue.closed", { clueId, orderId: clue.work_order_id });
   // 递减 Prometheus 指标 risk_clues_pending_total

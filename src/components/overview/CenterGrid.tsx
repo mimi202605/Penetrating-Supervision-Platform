@@ -8,7 +8,7 @@ interface CenterGridProps {
 
 const statusTextMap = {
   running: "运行中",
-  warning: "运行中",
+  warning: "告警",
   error: "异常",
 } as const;
 

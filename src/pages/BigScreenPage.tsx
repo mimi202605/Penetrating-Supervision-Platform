@@ -16,32 +16,44 @@ import * as mock from "@/mock";
 export default function BigScreenPage() {
   const [kpis, setKpis] = useState(mock.bigScreenKpis);
   const [heatmap, setHeatmap] = useState(mock.riskHeatmap);
+  const [byNode, setByNode] = useState<Record<string, number>>({});
   const [lastUpdate, setLastUpdate] = useState(new Date());
   const [countdown, setCountdown] = useState(30);
 
+  const refresh = () => {
+    api.getDashboard()
+      .then((d) => {
+        setKpis(d.kpis);
+        setHeatmap(d.heatmap);
+        setByNode(d.pendingStats.byNode);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
-    api.getBigScreenKpis().then(setKpis);
-    api.getRiskHeatmap().then(setHeatmap);
+    refresh();
   }, []);
 
-  // 30s 自动刷新
+  // 30s 自动刷新：副作用移出 setCountdown updater，避免 StrictMode 下重复请求
   useEffect(() => {
     const tick = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          setLastUpdate(new Date());
-          api.getBigScreenKpis().then(setKpis);
-          api.getRiskHeatmap().then(setHeatmap);
-          return 30;
-        }
-        return c - 1;
-      });
+      setCountdown((c) => (c <= 0 ? 30 : c - 1));
     }, 1000);
     return () => clearInterval(tick);
   }, []);
 
-  // 热力图最大值用于色阶
-  const maxRisk = Math.max(...heatmap.map((h) => h.high + h.medium + h.low));
+  // 倒计时归零时触发刷新（独立 effect，不在 updater 中执行副作用）
+  useEffect(() => {
+    if (countdown !== 0) return;
+    setLastUpdate(new Date());
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown]);
+
+  // 热力图最大值用于色阶，空数组兜底为 1 避免除零得到 NaN
+  const maxRisk = heatmap.length
+    ? Math.max(...heatmap.map((h) => h.high + h.medium + h.low))
+    : 1;
 
   const heatColor = (total: number) => {
     const ratio = total / maxRisk;
@@ -185,10 +197,10 @@ export default function BigScreenPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={[
-                    { name: "核查", value: 18 },
-                    { name: "整改", value: 12 },
-                    { name: "复核", value: 9 },
-                    { name: "归档", value: 8 },
+                    { name: "核查", value: byNode.verify ?? byNode.receive ?? 0 },
+                    { name: "整改", value: byNode.rectify ?? byNode.dispose ?? 0 },
+                    { name: "复核", value: byNode.review ?? byNode.approve ?? 0 },
+                    { name: "归档", value: byNode.archive ?? 0 },
                   ]}
                   margin={{ top: 8, right: 12, bottom: 0, left: -16 }}
                 >
@@ -219,7 +231,10 @@ export default function BigScreenPage() {
             className="rounded-md p-4"
             style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
           >
-            <h2 className="ds-section-title mb-3">资金流向态势</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="ds-section-title">资金流向态势</h2>
+              <span className="ds-section-sub">示例数据</span>
+            </div>
             <div className="flex flex-col gap-2">
               {[
                 { from: "新兴铸管基本户", to: "Everwin Holdings", amount: "8,600 万元", tone: "danger" as const },
@@ -245,7 +260,10 @@ export default function BigScreenPage() {
             className="rounded-md p-4"
             style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
           >
-            <h2 className="ds-section-title mb-3">投资概览</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="ds-section-title">投资概览</h2>
+              <span className="ds-section-sub">示例数据</span>
+            </div>
             <div className="flex flex-col gap-3">
               {[
                 { name: "本年投资额", value: "186 亿", trend: "↑ 12%" },
@@ -275,10 +293,10 @@ export default function BigScreenPage() {
             <h2 className="ds-section-title mb-3">待办统计</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { name: "待处置风险", value: "18", tone: "var(--color-danger)" },
-                { name: "在办工单", value: "47", tone: "var(--color-warning)" },
-                { name: "复核待办", value: "9", tone: "var(--color-primary)" },
-                { name: "归档待办", value: "8", tone: "var(--color-success)" },
+                { name: "待处置风险", value: (byNode.detect ?? 0) + (byNode.dispatch ?? 0), tone: "var(--color-danger)" },
+                { name: "在办工单", value: (byNode.receive ?? byNode.verify ?? 0) + (byNode.dispose ?? byNode.rectify ?? 0), tone: "var(--color-warning)" },
+                { name: "复核待办", value: byNode.approve ?? byNode.review ?? 0, tone: "var(--color-primary)" },
+                { name: "闭环待办", value: byNode.close ?? 0, tone: "var(--color-success)" },
               ].map((s) => (
                 <div
                   key={s.name}

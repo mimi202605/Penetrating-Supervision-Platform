@@ -36,7 +36,7 @@ export default function GraphPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
 
-  useEffect(() => {
+  const loadGraph = () => {
     api.getGraph().then(({ nodes: ns, edges: es }) => {
       // 简易圆形布局（避免引入额外图谱库）
       const placed = ns.map((n, i) => {
@@ -54,7 +54,11 @@ export default function GraphPage() {
       });
       setNodes(placed);
       setEdges(es);
-    });
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadGraph();
   }, []);
 
   const nodeMap = useMemo(() => {
@@ -124,7 +128,7 @@ export default function GraphPage() {
           </button>
           <button
             type="button"
-            onClick={() => setZoom(1)}
+            onClick={loadGraph}
             className="ds-icon-btn"
             aria-label="刷新"
           >

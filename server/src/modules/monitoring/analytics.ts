@@ -127,7 +127,8 @@ const financeRiskCards = [
 
 // ===================== 趋势算法（与 mock 一致，近30天） =====================
 
-const BASE_DATE = new Date(2026, 6, 16); // 2026-07-16（month 0-indexed）
+// 基准日期取系统当前日期，保证"近30天"语义与系统运行时间一致，而非硬编码历史日期
+const BASE_DATE = new Date();
 
 function formatDateLabel(d: Date): string {
   return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

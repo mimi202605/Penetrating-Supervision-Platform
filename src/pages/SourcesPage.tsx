@@ -222,29 +222,33 @@ export default function SourcesPage() {
   };
 
   // 新建提交
-  const onSubmitCreate = () => {
+  const onSubmitCreate = async () => {
+    if (submitting) return;
     if (!createForm.name.trim() || !createForm.connectorType) {
       showToast("请填写名称并选择连接器类型", "warning");
       return;
     }
     setSubmitting(true);
-    // 后端 POST /collection/sources 暂未封装，简化为前端状态更新 + 提示
-    window.setTimeout(() => {
-      const newSource: DataSource = {
-        id: `DS-${Date.now()}`,
+    try {
+      const newSource = await api.createDataSource({
         name: createForm.name.trim(),
+        connectorType: createForm.connectorType,
         type: createForm.connectorType,
-        status: "online",
-        records: "0 条",
-        updateFreq: "—",
-        owner: createForm.username || "—",
-      };
+        endpoint: createForm.endpoint || undefined,
+        owner: createForm.username || undefined,
+        config: createForm.endpoint
+          ? { endpoint: createForm.endpoint }
+          : undefined,
+      });
       setSources((prev) => [newSource, ...prev]);
-      setSubmitting(false);
       setCreateOpen(false);
       setCreateForm({ connectorType: "", name: "", endpoint: "", username: "", password: "" });
-      showToast("新建数据源已保存（新建功能后端已就绪）", "success");
-    }, 400);
+      showToast(`数据源已创建：${newSource.id}`, "success");
+    } catch (err) {
+      showToast(`创建失败：${(err as Error).message}`, "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const columns: Column<DataSource>[] = [

@@ -35,8 +35,15 @@ export default function PenetrationPage() {
     api.getPenetrationTree().then((t) => {
       setTree(t as TreeNode);
       setSelected(t as TreeNode);
-    });
+    }).catch(() => {});
   }, []);
+
+  // URL 参数 q 变化时同步 keyword（顶栏搜索跳转过来时也能更新关键字）
+  useEffect(() => {
+    const q = params.get("q");
+    if (q !== null && q !== keyword) setKeyword(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,9 +52,14 @@ export default function PenetrationPage() {
 
   const flattenResults = useMemo(() => {
     if (!tree) return [];
+    const lowerKeyword = keyword.toLowerCase();
     const results: TreeNode[] = [];
     const walk = (n: TreeNode) => {
-      if (n.name.includes(keyword) || n.type.includes(keyword)) results.push(n);
+      if (
+        n.name.toLowerCase().includes(lowerKeyword) ||
+        n.type.toLowerCase().includes(lowerKeyword)
+      )
+        results.push(n);
       n.children?.forEach(walk);
     };
     walk(tree);

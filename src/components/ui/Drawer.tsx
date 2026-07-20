@@ -38,27 +38,21 @@ export default function Drawer({
   }, [open, onClose]);
 
   if (typeof document === "undefined") return null;
+  // 关闭时直接 unmount portal，避免 children 内部 useEffect / 定时器 / 网络请求
+  // 在抽屉关闭后仍持续执行（性能浪费 + 数据泄漏）
+  if (!open) return null;
 
   return createPortal(
-    <div
-      className={cn("fixed inset-0 z-[300]", open ? "" : "pointer-events-none")}
-      aria-hidden={!open}
-    >
+    <div className="fixed inset-0 z-[300]" aria-hidden={!open}>
       {/* 遮罩 */}
       <div
         onClick={onClose}
-        className={cn(
-          "absolute inset-0 transition-opacity duration-240",
-          open ? "opacity-100" : "opacity-0",
-        )}
+        className="absolute inset-0 transition-opacity duration-240 opacity-100"
         style={{ background: "rgba(0,0,0,0.55)" }}
       />
       {/* 抽屉 */}
       <aside
-        className={cn(
-          "absolute top-0 right-0 bottom-0 flex flex-col transition-transform duration-240",
-          open ? "translate-x-0" : "translate-x-full",
-        )}
+        className="absolute top-0 right-0 bottom-0 flex flex-col transition-transform duration-240 translate-x-0"
         style={{
           width: "min(100vw, " + width + "px)",
           background: "var(--color-surface)",

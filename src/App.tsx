@@ -17,11 +17,14 @@ import CompliancePage from "@/pages/CompliancePage";
 import SafetyPage from "@/pages/SafetyPage";
 import AuditPage from "@/pages/AuditPage";
 import SettingsPage from "@/pages/SettingsPage";
+import LoginPage from "@/pages/LoginPage";
 
 export default function App() {
   return (
     <Router>
       <Routes>
+        {/* 登录页：独立路由，不挂载 AppLayout（无侧栏/顶栏），作为 401 跳转目标 */}
+        <Route path="/login" element={<LoginPage />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/collection/overview" element={<CollectionOverviewPage />} />

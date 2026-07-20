@@ -158,14 +158,14 @@ describe("DB 集成：规则引擎 / 穿透树 / 工单事务", async () => {
   });
 
   test("advanceWorkOrder：归档时 work_orders 与 risk_warnings 在同一事务中提交", () => {
-    // 构造一个处于 review 节点的工单 + 关联预警（预警已派单，related_order_id 已回填）
+    // 构造一个处于 close 节点的工单（V2 七态倒数第二节点，一次推进即归档）+ 关联预警
     execute(
       "INSERT INTO risk_warnings (id, title, domain, level, subject, rule, triggered_at, status, clue, related_order_id, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ["RW-TEST-1", "测试预警", "财务", "high", "公司A", "测试规则", "2026-07-17 10:00", "processing", "线索", "WO-TEST-1", "{}"],
     );
     execute(
       "INSERT INTO work_orders (id, risk_source, owner, current_node, progress, status, risk_warning_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      ["WO-TEST-1", "测试风险源", "张三", "review", 80, "processing", "RW-TEST-1", "2026-07-17 09:00", "2026-07-17 09:00"],
+      ["WO-TEST-1", "测试风险源", "张三", "close", 90, "processing", "RW-TEST-1", "2026-07-17 09:00", "2026-07-17 09:00"],
     );
 
     const result = advanceWorkOrder("WO-TEST-1");

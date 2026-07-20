@@ -2,7 +2,20 @@
 
 export type RiskLevel = "high" | "medium" | "low";
 export type RiskStatus = "pending" | "processing" | "resolved";
-export type WorkOrderNode = "verify" | "rectify" | "review" | "archive";
+/** 工单节点：V2 七态 + V1 别名（向后兼容，V1 通过 NODE_ALIASES 映射到 V2） */
+export type WorkOrderNode =
+  // V2 七态
+  | "detect"
+  | "dispatch"
+  | "receive"
+  | "dispose"
+  | "approve"
+  | "close"
+  | "archive"
+  // V1 别名（向后兼容）
+  | "verify"
+  | "rectify"
+  | "review";
 export type WorkOrderStatus = "processing" | "archived";
 
 export interface KpiSnapshot {

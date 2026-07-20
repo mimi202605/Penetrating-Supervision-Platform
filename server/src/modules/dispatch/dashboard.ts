@@ -22,11 +22,26 @@ interface HeatmapItem {
   low: number;
 }
 
-/** 待办统计 */
+/** 待办统计：byNode 同时兼容 V1 (verify/rectify/review/archive) 与 V2 七态
+ *  (detect/dispatch/receive/dispose/approve/close/archive)，前端按需取值 */
 interface PendingStats {
-  byNode: { verify: number; rectify: number; review: number; archive: number };
+  byNode: Record<string, number>;
   byOwner: { owner: string; count: number }[];
 }
+
+/** V1 节点 → V2 节点别名映射（与 workflow.ts NODE_ALIASES 一致） */
+const NODE_ALIASES: Record<string, string> = {
+  verify: "receive",
+  rectify: "dispose",
+  review: "approve",
+  detect: "detect",
+  dispatch: "dispatch",
+  receive: "receive",
+  dispose: "dispose",
+  approve: "approve",
+  close: "close",
+  archive: "archive",
+};
 
 /** 今日日期字符串（YYYY-MM-DD，本地时区，与种子 triggered_at 格式一致） */
 function todayDateStr(): string {
@@ -75,16 +90,23 @@ export const registerDashboard: FastifyPluginCallback = (app, _opts, done) => {
       { area: "境外单位", high: 6, medium: 11, low: 2 },
     ];
 
-    // 按节点聚合工单数
+    // 按节点聚合工单数（V1 节点归一为 V2 节点，避免 V1/V2 混用导致漏统计）
     const nodeRows = queryAll<{ current_node: string; count: number }>(
       "SELECT current_node, COUNT(*) AS count FROM work_orders GROUP BY current_node",
     );
-    const byNode = { verify: 0, rectify: 0, review: 0, archive: 0 };
+    const byNode: Record<string, number> = {
+      detect: 0, dispatch: 0, receive: 0, dispose: 0, approve: 0, close: 0, archive: 0,
+      // V1 兼容字段（与 V2 同义，前端可任取）
+      verify: 0, rectify: 0, review: 0,
+    };
     for (const r of nodeRows) {
-      if (r.current_node === "verify") byNode.verify = r.count;
-      else if (r.current_node === "rectify") byNode.rectify = r.count;
-      else if (r.current_node === "review") byNode.review = r.count;
-      else if (r.current_node === "archive") byNode.archive = r.count;
+      const normalized = NODE_ALIASES[r.current_node];
+      if (!normalized) continue;
+      byNode[normalized] = (byNode[normalized] ?? 0) + r.count;
+      // 同步写 V1 别名，前端旧版本兼容
+      if (normalized === "receive") byNode.verify += r.count;
+      else if (normalized === "dispose") byNode.rectify += r.count;
+      else if (normalized === "approve") byNode.review += r.count;
     }
 
     // 按责任人聚合在办工单数
