@@ -5,7 +5,7 @@ import { useAdminStore } from "@/store/adminStore";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 
-/** 后台深色侧栏：显式深色，不受主题变量影响 */
+/** 后台侧栏：跟随主题色变化（通过 CSS 变量 --color-sidebar 等） */
 export default function AdminSideNav() {
   const { collapsed, toggleCollapsed, drawerOpen, closeDrawer } = useAdminStore();
   const isMobile = useIsMobile();
@@ -23,7 +23,7 @@ export default function AdminSideNav() {
         />
         <aside
           className={cn(
-            "fixed top-0 left-0 bottom-0 w-[240px] z-[201] flex flex-col bg-[#0f172a] transition-transform duration-240",
+            "fixed top-0 left-0 bottom-0 w-[240px] z-[201] flex flex-col bg-[var(--color-sidebar)] transition-transform duration-240",
             drawerOpen ? "translate-x-0" : "-translate-x-full",
           )}
           style={{ transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)" }}
@@ -36,7 +36,7 @@ export default function AdminSideNav() {
 
   return (
     <aside
-      className="flex flex-col h-full flex-shrink-0 bg-[#0f172a] transition-all duration-200"
+      className="flex flex-col h-full flex-shrink-0 bg-[var(--color-sidebar)] transition-all duration-200"
       style={{ width: collapsed ? 64 : 220 }}
     >
       <AdminSideNavContent collapsed={collapsed} onToggle={toggleCollapsed} />
@@ -56,19 +56,19 @@ function AdminSideNavContent({
   return (
     <>
       {/* 头部 */}
-      <div className="flex items-center gap-2 px-4 h-[60px] flex-shrink-0 border-b border-white/5">
+      <div className="flex items-center gap-2 px-4 h-[60px] flex-shrink-0 border-b border-[var(--color-border-light)]">
         {!collapsed ? (
           <>
-            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[#3b82f6] text-white flex-shrink-0">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[var(--color-primary)] text-white flex-shrink-0">
               <ShieldMark />
             </div>
             <div className="leading-none min-w-0">
-              <div className="text-[13px] font-semibold text-white truncate">穿透式监管</div>
-              <div className="text-[11px] text-slate-400 mt-0.5">后台管理中心</div>
+              <div className="text-[13px] font-semibold text-[var(--color-foreground)] truncate">穿透式监管</div>
+              <div className="text-[11px] text-[var(--color-on-surface-variant)] mt-0.5">后台管理中心</div>
             </div>
           </>
         ) : (
-          <div className="w-7 h-7 mx-auto flex items-center justify-center bg-[#3b82f6] text-white rounded-md">
+          <div className="w-7 h-7 mx-auto flex items-center justify-center bg-[var(--color-primary)] text-white rounded-md">
             <ShieldMark />
           </div>
         )}
@@ -79,7 +79,7 @@ function AdminSideNavContent({
         {adminNavGroups.map((group, idx) => (
           <div key={idx} className={cn("px-3", idx > 0 && "mt-4")}>
             {!collapsed ? (
-              <div className="text-[11px] uppercase px-3 pt-1 pb-1.5 text-slate-500 tracking-wider">
+              <div className="text-[11px] uppercase px-3 pt-1 pb-1.5 text-[var(--color-on-surface-variant)] tracking-wider">
                 {group.title}
               </div>
             ) : null}
@@ -97,15 +97,15 @@ function AdminSideNavContent({
                         "group relative flex items-center gap-2.5 h-9 px-3 rounded-sm text-[13px] transition-colors",
                         collapsed && "justify-center px-0",
                         isActive
-                          ? "bg-[#1e293b] text-white"
-                          : "text-slate-300 hover:bg-white/5 hover:text-white",
+                          ? "bg-[var(--color-primary-container)] text-[var(--color-foreground)]"
+                          : "text-[var(--color-on-surface-variant)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)]",
                       )
                     }
                   >
                     {({ isActive }) => (
                       <>
                         {isActive ? (
-                          <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-[#3b82f6]" />
+                          <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-[var(--color-primary)]" />
                         ) : null}
                         <Icon size={16} className="flex-shrink-0" />
                         {!collapsed ? <span className="truncate">{item.label}</span> : null}
@@ -120,11 +120,11 @@ function AdminSideNavContent({
       </nav>
 
       {/* 返回前台 */}
-      <div className="flex-shrink-0 border-t border-white/5">
+      <div className="flex-shrink-0 border-t border-[var(--color-border-light)]">
         <NavLink
           to="/"
           className={cn(
-            "flex items-center gap-2.5 h-11 px-3 text-[13px] text-slate-300 hover:bg-white/5 hover:text-white transition-colors",
+            "flex items-center gap-2.5 h-11 px-3 text-[13px] text-[var(--color-on-surface-variant)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)] transition-colors",
             collapsed && "justify-center px-0",
           )}
           title={collapsed ? "返回前台" : undefined}
@@ -136,7 +136,7 @@ function AdminSideNavContent({
           <button
             type="button"
             onClick={onToggle}
-            className="flex items-center justify-center gap-2 h-11 w-full text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
+            className="flex items-center justify-center gap-2 h-11 w-full text-[var(--color-on-surface-variant)] hover:bg-[var(--state-hover)] hover:text-[var(--color-foreground)] transition-colors"
           >
             {collapsed ? <ChevronRight size={16} /> : (
               <>
