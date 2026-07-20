@@ -14,6 +14,24 @@ import type {
   DoughnutSlice,
   HealthBar,
   RiskLevel,
+  Connector,
+  StreamCatalog,
+  TransformType,
+  RegulatoryScene,
+  RiskClue,
+  LinkageRule,
+  Agent,
+  CollectionTaskRun,
+  AuditPoint,
+  DirtyRecord,
+  AdminRole,
+  AdminUser,
+  AdminRoleDef,
+  AdminAlert,
+  CockpitKpi,
+  MaskingRule,
+  MaskingEvent,
+  AuditLog,
 } from "@/api/types";
 
 /* ===================== 监管总览 ===================== */
@@ -502,3 +520,411 @@ export const penetrationTree = {
     },
   ],
 };
+
+/* ===================== V2 数据源管理与采集系统 ===================== */
+// 对齐 collection-system-v2 spec 的预置数据，供 GitHub Pages 演示站点回退使用。
+// 真实后端启动时由 server/src/db/seed.ts + seed-regulatory.ts 灌入。
+
+// 20 个连接器（6 实现 + 14 占位）—— 与 server/src/modules/collection/connectors/catalog.ts 同语义
+export const connectors: Connector[] = [
+  // 6 个已实现
+  { type: "kingdee-eas-openapi", name: "金蝶 EAS Cloud OpenAPI", category: "erp", description: "金蝶 EAS 主数据/凭证", capabilities: ["full", "incremental", "discover"], secretFields: ["password"], implemented: true },
+  { type: "sap-odata", name: "SAP OData", category: "erp", description: "SAP OData v2/v4 服务", capabilities: ["full", "incremental", "discover"], secretFields: ["password"], implemented: true },
+  { type: "jdbc-mysql", name: "MySQL (JDBC)", category: "db", description: "MySQL JDBC 通用连接", capabilities: ["full", "incremental", "discover"], secretFields: ["password"], implemented: true },
+  { type: "cdc-mysql", name: "MySQL CDC (binlog)", category: "db", description: "MySQL binlog 实时 CDC", capabilities: ["cdc", "schema-evolution"], secretFields: ["password"], implemented: true },
+  { type: "treasury-sys", name: "司库系统", category: "saas", description: "司库 REST API 模拟", capabilities: ["full", "incremental", "discover"], secretFields: ["token"], implemented: true },
+  { type: "file-csv", name: "CSV 文件", category: "file", description: "本地/SFTP CSV 流式读取", capabilities: ["full", "discover"], secretFields: [], implemented: true },
+  // 14 个占位
+  { type: "kingdee-eas-ws", name: "金蝶 EAS WebService (SOAP)", category: "erp", capabilities: ["full", "incremental"], secretFields: ["password"], implemented: false },
+  { type: "sap-bapi", name: "SAP BAPI/RFC", category: "erp", capabilities: ["full", "incremental"], secretFields: ["passwd"], implemented: false },
+  { type: "sap-idoc", name: "SAP IDoc", category: "erp", capabilities: ["cdc"], secretFields: ["certPath"], implemented: false },
+  { type: "igix-rest", name: "浪潮 iGIX REST", category: "erp", capabilities: ["full", "incremental", "discover"], secretFields: ["token"], implemented: false },
+  { type: "finance-shared", name: "财务共享平台", category: "saas", capabilities: ["full", "incremental"], secretFields: ["token"], implemented: false },
+  { type: "hr-system", name: "人力资源系统", category: "saas", capabilities: ["full", "incremental", "discover"], secretFields: ["token"], implemented: false },
+  { type: "salary-mgmt", name: "薪酬福利管理", category: "saas", capabilities: ["full", "incremental"], secretFields: ["token"], implemented: false },
+  { type: "finance-acc", name: "财务核算 (JDBC)", category: "db", capabilities: ["full", "incremental", "discover"], secretFields: ["password"], implemented: false },
+  { type: "tax-social", name: "税务与社保", category: "saas", capabilities: ["full"], secretFields: ["token"], implemented: false },
+  { type: "project-mgmt", name: "项目管理平台", category: "saas", capabilities: ["full", "incremental"], secretFields: ["token"], implemented: false },
+  { type: "contract-sys", name: "合同系统", category: "saas", capabilities: ["full", "incremental"], secretFields: ["token"], implemented: false },
+  { type: "procurement", name: "采购管理平台", category: "saas", capabilities: ["full", "incremental"], secretFields: ["token"], implemented: false },
+  { type: "e-bidding", name: "电子招标平台", category: "saas", capabilities: ["full", "incremental"], secretFields: ["token"], implemented: false },
+  { type: "external-credit", name: "外部工商 (天眼查/企查查)", category: "saas", capabilities: ["full"], secretFields: ["token"], implemented: false },
+];
+
+// 5 个监管场景（finance-risk 域）—— 与 server/src/db/seed-regulatory.ts SCENES 同语义
+export const regulatoryScenes: RegulatoryScene[] = [
+  { id: "sc-fin-dup-pay", domain: "finance-risk", name: "重复支付预警", description: "同收款方、同金额、同日多笔支付识别，防止拆分规避审批", status: "online" },
+  { id: "sc-fin-private-pay", domain: "finance-risk", name: "非工作时间大额对私支付", description: "22:00-06:00 对私支付且金额超过阈值，识别利益输送或资金挪用", status: "online" },
+  { id: "sc-fin-fake-trade", domain: "finance-risk", name: "融资性贸易/空转走单", description: "A→B→A 资金回流 + 无商业实质的关联交易", status: "online" },
+  { id: "sc-fin-guarantee", domain: "finance-risk", name: "超股比担保", description: "对外担保金额超过持股比例对应的金额，承担超额风险", status: "online" },
+  { id: "sc-fin-funding-due", domain: "finance-risk", name: "融资到期预警", description: "融资到期 30/7/1 天内分级预警，提前筹措还款资金", status: "online" },
+];
+
+// 13 类 Transform —— 与 server/src/modules/collection/transform/registry.ts ALL_TRANSFORM_SPECS 同语义
+export const transformTypes: TransformType[] = [
+  { type: "field-mapping", name: "字段映射", configSchema: { type: "object", properties: { mapping: { type: "object" }, includeOnly: { type: "boolean" } } } },
+  { type: "type-cast", name: "类型转换", configSchema: { type: "object", properties: { fields: { type: "object" } } } },
+  { type: "clean", name: "数据清洗", configSchema: { type: "object", properties: { trim: { type: "array" }, defaults: { type: "object" } } } },
+  { type: "dedup", name: "主键去重", configSchema: { type: "object", properties: { keys: { type: "array" } } } },
+  { type: "filter", name: "表达式过滤", configSchema: { type: "object", properties: { expr: { type: "string" } } } },
+  { type: "mask", name: "字段脱敏", configSchema: { type: "object", properties: { fields: { type: "array" } } } },
+  { type: "flatten", name: "嵌套展开", configSchema: { type: "object", properties: { arrayField: { type: "string" }, mode: { type: "string" } } } },
+  { type: "enrich", name: "维表富化", configSchema: { type: "object", properties: { lookup: { type: "object" }, join: { type: "string" } } } },
+  { type: "script", name: "脚本（vm2 沙箱）", configSchema: { type: "object", properties: { code: { type: "string" } } } },
+  { type: "sql", name: "SQL（alasql）", configSchema: { type: "object", properties: { sql: { type: "string" } } } },
+  { type: "entity-resolve", name: "实体消歧", configSchema: { type: "object", properties: { keys: { type: "array" } } } },
+  { type: "relationship-extract", name: "关系抽取", configSchema: { type: "object", properties: { nodes: { type: "array" }, edges: { type: "array" } } } },
+  { type: "evidence-snapshot", name: "证据快照", configSchema: { type: "object", properties: { condition: { type: "string" } } } },
+];
+
+// 16 个 AI 智能体（3 已实现 + 13 占位）—— 与 server/src/modules/ai/agents/registry.ts AGENTS 同语义
+export const agents: Agent[] = [
+  { id: "info-extract", name: "信息抽取", category: "extract", capabilities: ["文本抽取", "字段提取", "结构化"], inputSchema: "{text:string, fields?:string[]}", outputSchema: "{fields:object, confidence:number}", protocol: "internal", model: "llm", description: "从文本/表格抽取结构化字段", implemented: true },
+  { id: "text-compare", name: "文本比对", category: "compare", capabilities: ["查重", "差异比对", "相似度"], inputSchema: "{textA:string, textB:string}", outputSchema: "{similarity:number, diff:[]}", protocol: "internal", model: "hybrid", description: "标书查重/阴阳合同，cosine 相似度 + LCS diff", implemented: true },
+  { id: "report-generate", name: "风险报告生成", category: "generate", capabilities: ["报告生成", "markdown", "线索汇总"], inputSchema: "{clueIds:string[]}", outputSchema: "{report:string, clueCount:number}", protocol: "internal", model: "llm", description: "输入 clueIds 生成 markdown 风险处置报告", implemented: true },
+  { id: "entity-resolve", name: "实体归一", category: "transform", capabilities: ["实体对齐", "主体归一"], inputSchema: "{entities:object[]}", outputSchema: "{resolved:object[], duplicates:object[]}", protocol: "a2a", model: "hybrid", description: "跨系统主体归一", implemented: false },
+  { id: "relationship-extract", name: "关系抽取", category: "extract", capabilities: ["关系抽取", "三元组", "图谱"], inputSchema: "{text:string}", outputSchema: "{triples:[]}", protocol: "internal", model: "llm", description: "抽取实体间关系", implemented: false },
+  { id: "anomaly-detect", name: "异常检测", category: "analyze", capabilities: ["异常检测", "统计", "离群点"], inputSchema: "{series:number[]}", outputSchema: "{anomalies:[]}", protocol: "internal", model: "local", description: "统计异常检测", implemented: false },
+  { id: "risk-assess", name: "风险评估", category: "analyze", capabilities: ["风险评估", "等级判定"], inputSchema: "{clueId:string}", outputSchema: "{level:string, score:number}", protocol: "a2a", model: "hybrid", description: "风险等级评估", implemented: false },
+  { id: "evidence-collect", name: "证据收集", category: "extract", capabilities: ["证据快照", "取证"], inputSchema: "{clueId:string}", outputSchema: "{evidence:[]}", protocol: "internal", model: "local", description: "证据快照收集", implemented: false },
+  { id: "graph-build", name: "图谱构建", category: "transform", capabilities: ["图构建", "邻接表"], inputSchema: "{nodes:[], edges:[]}", outputSchema: "{graphId:string}", protocol: "internal", model: "local", description: "邻接表图谱构建", implemented: false },
+  { id: "sentiment-analysis", name: "情感分析", category: "analyze", capabilities: ["情感", "舆情"], inputSchema: "{text:string}", outputSchema: "{sentiment:string, score:number}", protocol: "internal", model: "llm", description: "舆情情感分析", implemented: false },
+  { id: "nlu-classify", name: "意图分类", category: "analyze", capabilities: ["NLU", "意图识别"], inputSchema: "{text:string}", outputSchema: "{intent:string, confidence:number}", protocol: "internal", model: "llm", description: "自然语言意图分类", implemented: false },
+  { id: "summarization", name: "摘要生成", category: "generate", capabilities: ["摘要", "压缩"], inputSchema: "{text:string}", outputSchema: "{summary:string}", protocol: "internal", model: "llm", description: "长文本摘要", implemented: false },
+  { id: "translation", name: "翻译", category: "transform", capabilities: ["翻译", "多语言"], inputSchema: "{text:string, target:string}", outputSchema: "{translation:string}", protocol: "internal", model: "llm", description: "多语言翻译", implemented: false },
+  { id: "ocr-extract", name: "OCR 抽取", category: "extract", capabilities: ["OCR", "图像"], inputSchema: "{image:string}", outputSchema: "{text:string}", protocol: "internal", model: "local", description: "图像 OCR 文本抽取", implemented: false },
+  { id: "data-quality", name: "数据质量", category: "analyze", capabilities: ["质量校验", "完整性"], inputSchema: "{records:[]}", outputSchema: "{issues:[]}", protocol: "internal", model: "local", description: "数据质量评估", implemented: false },
+  { id: "compliance-check", name: "合规检查", category: "analyze", capabilities: ["合规", "条款"], inputSchema: "{document:string}", outputSchema: "{violations:[]}", protocol: "a2a", model: "hybrid", description: "条款合规检查", implemented: false },
+];
+
+// 10 条联查规则 —— 与 server/src/db/seed-regulatory.ts LINKAGE_RULES 同语义
+export const linkageRules: LinkageRule[] = [
+  { id: "LR-FIN-DUP-PAY-001", sceneId: "sc-fin-dup-pay", name: "重复支付穿透联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "treasury-sys · 入口指标 → ODS 原始单据" },
+  { id: "LR-FIN-PRIVATE-PAY-001", sceneId: "sc-fin-private-pay", name: "非工作时间对私支付联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "treasury-sys · 入口指标 → ODS 原始单据" },
+  { id: "LR-FIN-FAKE-TRADE-001", sceneId: "sc-fin-fake-trade", name: "融资性贸易联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "treasury-sys · 入口指标 → ODS 原始单据" },
+  { id: "LR-FIN-GUARANTEE-001", sceneId: "sc-fin-guarantee", name: "超股比担保联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "treasury-sys · 入口指标 → ODS 原始单据" },
+  { id: "LR-FIN-FUNDING-DUE-001", sceneId: "sc-fin-funding-due", name: "融资到期联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "treasury-sys · 入口指标 → ODS 原始单据" },
+  { id: "LR-INV-OVERDEBT-001", sceneId: "sc-fin-fake-trade", name: "投资过度负债联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "kingdee-eas-openapi · 入口指标 → ODS 原始单据" },
+  { id: "LR-INV-IRRELEVANT-001", sceneId: "sc-fin-guarantee", name: "无关多元联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "kingdee-eas-openapi · 入口指标 → ODS 原始单据" },
+  { id: "LR-INV-LOSS-001", sceneId: "sc-fin-funding-due", name: "投资亏损联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "kingdee-eas-openapi · 入口指标 → ODS 原始单据" },
+  { id: "LR-CON-BID-DUP-001", sceneId: "sc-fin-dup-pay", name: "标书查重联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "file-csv · 入口指标 → ODS 原始单据" },
+  { id: "LR-CON-YINYANG-001", sceneId: "sc-fin-private-pay", name: "阴阳合同联查", drillPath: ["ads", "dws", "dwd", "ods"], description: "file-csv · 入口指标 → ODS 原始单据" },
+];
+
+// 6 条风险线索（覆盖 yellow/orange/red 三级，pending/dispatched/closed 三态）
+export const riskClues: RiskClue[] = [
+  {
+    id: "RC20260716-001",
+    sceneId: "sc-fin-dup-pay",
+    modelId: "m-fin-dup-pay-001",
+    entityType: "supplier",
+    entityId: "SUP-001",
+    riskLevel: "red",
+    riskValue: "12 笔",
+    description: "供应商 SUP-001 同日同金额重复支付 12 笔，金额合计 1,200 万元",
+    status: "dispatched",
+    detectedAt: "2026-07-16 09:18:00",
+    dueAt: "2026-07-23 18:00:00",
+    assignedTo: "李建国",
+    orgCode: "xinxing-zhuguan",
+    evidenceJson: { dupCount: 12, totalAmount: 12000000, payee: "鑫达贸易" },
+    workOrderId: "WO20260716-001",
+  },
+  {
+    id: "RC20260716-002",
+    sceneId: "sc-fin-private-pay",
+    modelId: "m-fin-private-pay-001",
+    entityType: "employee",
+    entityId: "EMP-2058",
+    riskLevel: "orange",
+    riskValue: "85 万",
+    description: "02:13 对私支付 85 万元，超过阈值 20 万元",
+    status: "dispatched",
+    detectedAt: "2026-07-16 02:15:00",
+    dueAt: "2026-07-23 18:00:00",
+    assignedTo: "王志远",
+    orgCode: "xinxing-zhuguan",
+    evidenceJson: { hour: 2, amount: 850000, payee: "张某（个人）" },
+    workOrderId: "WO20260716-002",
+  },
+  {
+    id: "RC20260715-008",
+    sceneId: "sc-fin-fake-trade",
+    modelId: "m-fin-fake-trade-001",
+    entityType: "supplier",
+    entityId: "SUP-008",
+    riskLevel: "red",
+    riskValue: "3 笔",
+    description: "A→B→A 资金回流 3 笔，金额合计 4,500 万元，无商业实质",
+    status: "pending",
+    detectedAt: "2026-07-15 16:30:00",
+    dueAt: "2026-07-22 18:00:00",
+    assignedTo: null,
+    orgCode: "jihua-touzi",
+    evidenceJson: { roundTripCount: 3, tradeVolume: 45000000 },
+    workOrderId: null,
+  },
+  {
+    id: "RC20260715-009",
+    sceneId: "sc-fin-guarantee",
+    modelId: "m-fin-guarantee-001",
+    entityType: "subsidiary",
+    entityId: "SUB-际华新能源",
+    riskLevel: "yellow",
+    riskValue: "1.8 倍",
+    description: "对外担保金额 / 持股比例 = 1.8，超过阈值 1",
+    status: "pending",
+    detectedAt: "2026-07-15 11:20:00",
+    dueAt: "2026-07-22 18:00:00",
+    assignedTo: null,
+    orgCode: "jihua-touzi-1",
+    evidenceJson: { guaranteeAmount: 180000000, shareholdingRatio: 0.51, ratio: 1.8 },
+    workOrderId: null,
+  },
+  {
+    id: "RC20260714-015",
+    sceneId: "sc-fin-funding-due",
+    modelId: "m-fin-funding-due-001",
+    entityType: "subsidiary",
+    entityId: "SUB-新兴重工",
+    riskLevel: "red",
+    riskValue: "1 天内到期",
+    description: "3 亿元融资 1 天内到期，需立即筹措还款资金",
+    status: "closed",
+    detectedAt: "2026-07-14 09:00:00",
+    dueAt: "2026-07-15 18:00:00",
+    assignedTo: "周涛",
+    orgCode: "xinxing-zhonggong",
+    evidenceJson: { daysToDue: 1, amount: 300000000 },
+    workOrderId: "WO20260714-018",
+  },
+  {
+    id: "RC20260714-022",
+    sceneId: "sc-fin-dup-pay",
+    modelId: "m-fin-dup-pay-001",
+    entityType: "supplier",
+    entityId: "SUP-205",
+    riskLevel: "yellow",
+    riskValue: "3 笔",
+    description: "供应商 SUP-205 同日同金额重复支付 3 笔，金额合计 240 万元",
+    status: "closed",
+    detectedAt: "2026-07-14 14:50:00",
+    dueAt: "2026-07-21 18:00:00",
+    assignedTo: "吴芳",
+    orgCode: "xinxing-zhuguan",
+    evidenceJson: { dupCount: 3, totalAmount: 2400000, payee: "华信物资" },
+    workOrderId: "WO20260714-025",
+  },
+];
+
+// 采集任务运行历史（对应 collectionTasks 第一条 T-001 的最近 3 次 run）
+export const collectionTaskRuns: CollectionTaskRun[] = [
+  { id: "run-20260716-0910", taskId: "T-001", attempt: 1, status: "success", startedAt: "2026-07-16 09:10:00", finishedAt: "2026-07-16 09:10:42", recordsRead: 1820, recordsWrite: 1818, recordsDirty: 2, bytesRead: 438000, error: null, checkpoint: '{"lastModifiedAt":"2026-07-16T01:10:00Z"}' },
+  { id: "run-20260716-0905", taskId: "T-001", attempt: 1, status: "success", startedAt: "2026-07-16 09:05:00", finishedAt: "2026-07-16 09:05:38", recordsRead: 1742, recordsWrite: 1742, recordsDirty: 0, bytesRead: 418000, error: null, checkpoint: '{"lastModifiedAt":"2026-07-16T01:05:00Z"}' },
+  { id: "run-20260716-0900", taskId: "T-001", attempt: 1, status: "failed", startedAt: "2026-07-16 09:00:00", finishedAt: "2026-07-16 09:00:21", recordsRead: 528, recordsWrite: 0, recordsDirty: 0, bytesRead: 126000, error: "ErrorLimitExceeded: 脏数据比例 0.13 超过 0.01", checkpoint: null },
+  { id: "run-20260716-0912", taskId: "T-002", attempt: 1, status: "running", startedAt: "2026-07-16 09:12:00", finishedAt: undefined, recordsRead: 12340, recordsWrite: 12340, recordsDirty: 0, bytesRead: 2960000, error: null, checkpoint: '{"binlog_file":"mysql-bin.000123","position":456789,"last_pk":12340}' },
+];
+
+// 4 审计点吞吐量（对应 T-001 最近一次 run run-20260716-0910）
+export const auditPoints: AuditPoint[] = [
+  { taskId: "T-001", auditPoint: "reader_in", logTs: "2026-07-16 09:10:02", count: 1820, bytes: 438000, delayMs: 12 },
+  { taskId: "T-001", auditPoint: "reader_out", logTs: "2026-07-16 09:10:18", count: 1820, bytes: 438000, delayMs: 8 },
+  { taskId: "T-001", auditPoint: "writer_in", logTs: "2026-07-16 09:10:20", count: 1818, bytes: 436000, delayMs: 4 },
+  { taskId: "T-001", auditPoint: "writer_out", logTs: "2026-07-16 09:10:42", count: 1818, bytes: 436000, delayMs: 6 },
+  { taskId: "T-001", auditPoint: "reader_in", logTs: "2026-07-16 09:05:02", count: 1742, bytes: 418000, delayMs: 11 },
+  { taskId: "T-001", auditPoint: "reader_out", logTs: "2026-07-16 09:05:15", count: 1742, bytes: 418000, delayMs: 7 },
+  { taskId: "T-001", auditPoint: "writer_in", logTs: "2026-07-16 09:05:17", count: 1742, bytes: 418000, delayMs: 4 },
+  { taskId: "T-001", auditPoint: "writer_out", logTs: "2026-07-16 09:05:38", count: 1742, bytes: 418000, delayMs: 5 },
+];
+
+// 脏数据记录（对应 T-001 run-20260716-0910 的 2 条脏数据）
+export const dirtyRecords: DirtyRecord[] = [
+  { taskId: "T-001", runId: "run-20260716-0910", stepId: "type-cast", raw: { voucherNo: "V20260716001", amount: "abc" }, error: "无法将 amount=abc 转换为 decimal" },
+  { taskId: "T-001", runId: "run-20260716-0910", stepId: "clean", raw: { voucherNo: "V20260716002", accountDate: null }, error: "accountDate 为空，缺省值补全失败" },
+  { taskId: "T-001", runId: "run-20260716-0900", stepId: "type-cast", raw: { voucherNo: "V20260716010", amount: "N/A" }, error: "无法将 amount=N/A 转换为 decimal" },
+];
+
+// StreamCatalog（对应司库 MySQL 数据源 DS-002 的 schema 发现结果）
+export const streamCatalog: StreamCatalog = {
+  streams: [
+    {
+      name: "payment_flow",
+      description: "支付流水主表",
+      fields: [
+        { name: "id", type: "integer" },
+        { name: "voucher_no", type: "string" },
+        { name: "payer_account", type: "string" },
+        { name: "payee_account", type: "string" },
+        { name: "amount", type: "decimal" },
+        { name: "currency", type: "string" },
+        { name: "pay_time", type: "datetime" },
+        { name: "is_private", type: "boolean" },
+        { name: "created_at", type: "datetime" },
+      ],
+    },
+    {
+      name: "account_balance",
+      description: "账户余额快照",
+      fields: [
+        { name: "id", type: "integer" },
+        { name: "account_no", type: "string" },
+        { name: "balance", type: "decimal" },
+        { name: "snapshot_at", type: "datetime" },
+      ],
+    },
+    {
+      name: "guarantee_info",
+      description: "担保信息",
+      fields: [
+        { name: "id", type: "integer" },
+        { name: "guarantor", type: "string" },
+        { name: "beneficiary", type: "string" },
+        { name: "amount", type: "decimal" },
+        { name: "shareholding_ratio", type: "decimal" },
+        { name: "sign_date", type: "date" },
+      ],
+    },
+  ],
+};
+
+/* ===================== 后台管理中心 Mock 数据 ===================== */
+
+// 6 个用户（覆盖三角色三部门）
+export const adminUsers: AdminUser[] = [
+  { id: "u-admin-001", username: "admin", name: "系统管理员", role: "admin", department: "信息中心", email: "admin@example.com", phone: "138****0001", status: "active", lastLoginAt: "2026-07-17 08:50:12", createdAt: "2025-01-01 09:00:00" },
+  { id: "u-verifier-002", username: "verifier", name: "王志远", role: "核查员", department: "监督处", email: "wangzy@example.com", phone: "138****0002", status: "active", lastLoginAt: "2026-07-17 08:42:03", createdAt: "2025-03-12 10:20:00" },
+  { id: "u-handler-003", username: "handler", name: "李建国", role: "处置员", department: "处置处", email: "lijg@example.com", phone: "138****0003", status: "active", lastLoginAt: "2026-07-16 18:11:45", createdAt: "2025-04-20 14:00:00" },
+  { id: "u-verifier-004", username: "zhaomin", name: "赵敏", role: "核查员", department: "合规处", email: "zhaomin@example.com", phone: "138****0004", status: "active", lastLoginAt: "2026-07-17 09:01:22", createdAt: "2025-06-08 11:30:00" },
+  { id: "u-handler-005", username: "suntlei", name: "孙磊", role: "处置员", department: "处置处", email: "sunl@example.com", phone: "138****0005", status: "disabled", lastLoginAt: "2026-06-30 17:25:00", createdAt: "2025-08-15 09:45:00" },
+  { id: "u-admin-006", username: "wufang", name: "吴芳", role: "admin", department: "信息中心", email: "wufang@example.com", phone: "138****0006", status: "active", lastLoginAt: "2026-07-17 07:55:30", createdAt: "2025-10-01 08:00:00" },
+];
+
+// 权限模块清单（矩阵列）—— 与后台 4 大模块对齐
+export const ADMIN_PERMISSION_MODULES = [
+  "运营监控",
+  "系统管理",
+  "数据采集运维",
+  "监管配置",
+] as const;
+export const ADMIN_PERMISSION_OPS = ["查看", "新增", "编辑", "删除", "导出"] as const;
+
+// 3 个角色定义 + 权限矩阵
+export const adminRoles: AdminRoleDef[] = [
+  {
+    id: "r-admin",
+    name: "系统管理员",
+    code: "admin",
+    description: "拥有后台全部模块全部操作权限",
+    userCount: 2,
+    permissions: ADMIN_PERMISSION_MODULES.map((module) => ({
+      module,
+      operations: ADMIN_PERMISSION_OPS.map((op) => ({ op, allowed: true })),
+    })),
+  },
+  {
+    id: "r-verifier",
+    name: "核查员",
+    code: "核查员",
+    description: "前台核查工单处置，后台只读监控",
+    userCount: 2,
+    permissions: ADMIN_PERMISSION_MODULES.map((module) => ({
+      module,
+      operations: ADMIN_PERMISSION_OPS.map((op) => ({
+        op,
+        allowed: op === "查看" || op === "导出",
+      })),
+    })),
+  },
+  {
+    id: "r-handler",
+    name: "处置员",
+    code: "处置员",
+    description: "前台风险线索处置，后台仅运营监控只读",
+    userCount: 2,
+    permissions: ADMIN_PERMISSION_MODULES.map((module) => ({
+      module,
+      operations: ADMIN_PERMISSION_OPS.map((op) => ({
+        op,
+        allowed: module === "运营监控" && (op === "查看" || op === "导出"),
+      })),
+    })),
+  },
+];
+
+// 8 条告警（覆盖 red/orange/yellow 三级）
+export const adminAlerts: AdminAlert[] = [
+  { id: "AL-001", title: "采集任务 T-006 连续失败 3 次", severity: "red", status: "active", module: "数据采集运维", detail: "项目档案同步任务失败，错误：ErrorLimitExceeded 脏数据比例超限", triggeredAt: "2026-07-17 08:30:00" },
+  { id: "AL-002", title: "司库 MySQL CDC 延迟 > 30s", severity: "red", status: "active", module: "数据采集运维", detail: "binlog 消费延迟 42s，可能影响资金实时监控", triggeredAt: "2026-07-17 08:15:00" },
+  { id: "AL-003", title: "规则 R-021 命中率异常下降", severity: "orange", status: "active", module: "监管配置", detail: "资金异动规则近 1 小时命中 0 次，平日均值 8 次/小时", triggeredAt: "2026-07-17 07:40:00" },
+  { id: "AL-004", title: "AI 报告生成智能体调用失败率 12%", severity: "orange", status: "active", module: "监管配置", detail: "report-generate 近 1 小时调用 50 次失败 6 次", triggeredAt: "2026-07-17 06:20:00" },
+  { id: "AL-005", title: "核查工单 WO20260715-008 即将超时", severity: "orange", status: "confirmed", module: "运营监控", detail: "剩余处置时长 1.2h，低于 SLA 阈值 2h", triggeredAt: "2026-07-17 05:00:00", confirmedBy: "王志远" },
+  { id: "AL-006", title: "数据源 DS-005 健康度降至 30%", severity: "yellow", status: "active", module: "数据采集运维", detail: "项目档案库连接异常，最近 4 次探测 3 次超时", triggeredAt: "2026-07-17 03:10:00" },
+  { id: "AL-007", title: "审计日志写入延迟 2.3s", severity: "yellow", status: "silenced", module: "系统管理", detail: "审计点 writer_out 延迟略高，已静默观察", triggeredAt: "2026-07-16 22:45:00", confirmedBy: "系统管理员" },
+  { id: "AL-008", title: "用户 sunlei 连续登录失败 5 次", severity: "yellow", status: "confirmed", module: "系统管理", detail: "账号已自动停用，疑似密码遗忘", triggeredAt: "2026-07-16 17:30:00", confirmedBy: "吴芳" },
+];
+
+// 驾驶舱 KPI 聚合（含 7 日趋势）
+export const cockpitKpi: CockpitKpi = {
+  collectionThroughput: { value: 1820, unit: "条/s", delta: "↑ 8.2%", trend: "up" },
+  ruleHits: { value: 326, delta: "↑ 12%", trend: "up" },
+  orderSla: { value: "4.2h", delta: "↓ 0.3h", trend: "down" },
+  aiCalls: { value: 1284, delta: "↑ 5.6%", trend: "up" },
+  moduleHealth: [
+    { name: "数据采集中心", health: 99, tone: "success" },
+    { name: "智慧监督中心", health: 97, tone: "success" },
+    { name: "调度指挥中心", health: 88, tone: "warning" },
+    { name: "AI 智能体", health: 92, tone: "success" },
+    { name: "监管配置", health: 95, tone: "success" },
+    { name: "系统管理", health: 90, tone: "warning" },
+  ],
+  trends: (() => {
+    const arr: CockpitKpi["trends"] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(2026, 6, 17);
+      d.setDate(d.getDate() - i);
+      const label = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      arr.push({
+        date: label,
+        collection: 1600 + Math.round(Math.sin(i / 2) * 200) + (i % 3) * 80,
+        ruleHits: 40 + Math.round(Math.cos(i / 3) * 8) + (i % 4) * 3,
+        orders: 8 + (i % 3) + Math.round(Math.sin(i) * 2),
+        ai: 160 + Math.round(Math.cos(i / 2) * 30) + (i % 5) * 12,
+      });
+    }
+    return arr;
+  })(),
+  alertSummary: [
+    { severity: "red", count: 2 },
+    { severity: "orange", count: 3 },
+    { severity: "yellow", count: 3 },
+  ],
+};
+
+// 脱敏规则
+export const maskingRules: MaskingRule[] = [
+  { id: "MR-001", name: "账户号脱敏", field: "account_no", algorithm: "mask", pattern: "保留前4后4，中间*号", sourceId: "DS-002", sourceName: "司库 MySQL 主库", enabled: true },
+  { id: "MR-002", name: "身份证号哈希", field: "id_card", algorithm: "hash", pattern: "SHA-256 单向哈希", sourceId: "DS-001", sourceName: "浪潮 iGIX 财务模块", enabled: true },
+  { id: "MR-003", name: "手机号掩码", field: "phone", algorithm: "mask", pattern: "保留前3后4，中间*号", enabled: true },
+  { id: "MR-004", name: "金额加密", field: "amount", algorithm: "encrypt", pattern: "AES-256 可逆加密", sourceId: "DS-002", sourceName: "司库 MySQL 主库", enabled: true },
+  { id: "MR-005", name: "对手方名称替换", field: "counterparty", algorithm: "replace", pattern: "替换为统一占位符", sourceId: "DS-001", sourceName: "浪潮 iGIX 财务模块", enabled: false },
+];
+
+// 脱敏事件审计
+export const maskingEvents: MaskingEvent[] = [
+  { id: "ME-001", ruleId: "MR-001", ruleName: "账户号脱敏", sourceId: "DS-002", field: "account_no", appliedAt: "2026-07-17 09:12:00", count: 1820 },
+  { id: "ME-002", ruleId: "MR-002", ruleName: "身份证号哈希", sourceId: "DS-001", field: "id_card", appliedAt: "2026-07-17 09:10:00", count: 42 },
+  { id: "ME-003", ruleId: "MR-004", ruleName: "金额加密", sourceId: "DS-002", field: "amount", appliedAt: "2026-07-17 09:12:00", count: 1820 },
+  { id: "ME-004", ruleId: "MR-003", ruleName: "手机号掩码", sourceId: "DS-001", field: "phone", appliedAt: "2026-07-17 08:45:00", count: 88 },
+];
+
+// 操作审计日志（8 条，覆盖各模块动作）
+export const auditLogs: AuditLog[] = [
+  { id: "LOG-001", userId: "u-admin-001", action: "登录", target: "/admin/cockpit", ip: "10.0.0.12", detail: "管理员登录后台", createdAt: "2026-07-17 08:50:12" },
+  { id: "LOG-002", userId: "u-admin-001", action: "新增", target: "数据源 DS-007", ip: "10.0.0.12", detail: "新建数据源「司库 Oracle 备库」", createdAt: "2026-07-17 09:02:33" },
+  { id: "LOG-003", userId: "u-verifier-002", action: "查询", target: "穿透查询 q=新兴铸管", ip: "10.0.0.25", detail: "穿透查询主体", createdAt: "2026-07-17 09:05:18" },
+  { id: "LOG-004", userId: "u-admin-006", action: "编辑", target: "角色 r-verifier", ip: "10.0.0.18", detail: "调整核查员权限矩阵", createdAt: "2026-07-17 09:10:45" },
+  { id: "LOG-005", userId: "u-handler-003", action: "处置", target: "工单 WO20260716-001", ip: "10.0.0.33", detail: "推进工单至 rectify 节点", createdAt: "2026-07-17 09:15:02" },
+  { id: "LOG-006", userId: "u-admin-001", action: "导出", target: "操作审计日志", ip: "10.0.0.12", detail: "导出 7 日审计日志 CSV", createdAt: "2026-07-17 09:20:11" },
+  { id: "LOG-007", userId: "u-verifier-004", action: "查询", target: "风险预警列表", ip: "10.0.0.41", detail: "筛选 high 级别预警", createdAt: "2026-07-17 09:22:30" },
+  { id: "LOG-008", userId: "u-admin-006", action: "停用", target: "用户 u-handler-005", ip: "10.0.0.18", detail: "停用用户 sunlei（连续登录失败）", createdAt: "2026-07-16 17:31:00" },
+];

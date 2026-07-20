@@ -3,7 +3,7 @@
 // 由于 DB 无 metrics 列且账户/流水 id 与 mock 穿透树不完全一致，
 // metrics 与账户/流水子树采用常量映射，保证与 mock penetrationTree 字段/嵌套完全一致
 import type { FastifyInstance, FastifyPluginCallback, FastifyReply, FastifyRequest } from "fastify";
-import { queryAll } from "../../db/index.js";
+import { queryAll, queryOne } from "../../db/index.js";
 import { logger } from "../../utils/logger.js";
 
 /** 穿透树节点（对齐 mock penetrationTree 契约） */
@@ -134,6 +134,217 @@ export function buildPenetrationTree(): PenetrationNode | null {
   return buildNode(root, new Set<string>());
 }
 
+// ===================== 四级穿透下钻（V2 Task 17） =====================
+// 四层映射：
+//   ADS 层 = model_indicators（每个指标为一个 ADS 条目，经 model_id → regulatory_models.scene_id 关联场景）
+//   DWS 层 = data_lineage 按 sink_table 分组（每个 sink_table 为一个 DWS block），按 scene_id 过滤
+//   DWD 层 = ods_generic 行（每行为一个 DWD detail），按 stream（= sink_table）过滤
+//   ODS 层 = ods_generic.record_json 原始内容
+
+/** 解析 record_json，失败返回空对象 */
+function parseRecord(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/** 1. ADS → DWS：给定 indicatorId，返回该指标关联场景下的 DWS block 列表 */
+export function drillADS(indicatorId: string): {
+  indicator: { id: string; modelId: string; name: string; expr: string | null; dataSource: string | null; unit: string | null } | null;
+  sceneId: string | null;
+  dwsBlocks: Array<{ blockId: string; sinkTable: string; layer: string | null; sceneId: string | null; taskId: string }>;
+} {
+  const ind = queryOne<{ id: string; model_id: string; name: string; expr: string | null; data_source: string | null; unit: string | null }>(
+    "SELECT id, model_id, name, expr, data_source, unit FROM model_indicators WHERE id = ?",
+    [indicatorId],
+  );
+  if (!ind) {
+    return { indicator: null, sceneId: null, dwsBlocks: [] };
+  }
+  const indicator = {
+    id: ind.id,
+    modelId: ind.model_id,
+    name: ind.name,
+    expr: ind.expr,
+    dataSource: ind.data_source,
+    unit: ind.unit,
+  };
+  const model = queryOne<{ id: string; scene_id: string | null }>(
+    "SELECT id, scene_id FROM regulatory_models WHERE id = ?",
+    [ind.model_id],
+  );
+  const sceneId = model?.scene_id ?? null;
+  let dwsBlocks: Array<{ blockId: string; sinkTable: string; layer: string | null; sceneId: string | null; taskId: string }> = [];
+  if (sceneId) {
+    const rows = queryAll<{ sink_table: string; layer: string | null; scene_id: string | null; task_id: string }>(
+      "SELECT DISTINCT sink_table, layer, scene_id, task_id FROM data_lineage WHERE scene_id = ?",
+      [sceneId],
+    );
+    dwsBlocks = rows.map((r) => ({
+      blockId: r.sink_table,
+      sinkTable: r.sink_table,
+      layer: r.layer,
+      sceneId: r.scene_id,
+      taskId: r.task_id,
+    }));
+  }
+  return { indicator, sceneId, dwsBlocks };
+}
+
+/** 2. DWS → DWD：给定 blockId (=sink_table)，返回该 block 下的 DWD detail 列表
+ *
+ * blockId 是 data_lineage.sink_table（如 ods_payment_flow 或自定义 sink_target）。
+ * ods_generic.stream 存的是原始 stream 名（如 payment_flow），与 sink_table 不一定相等，
+ * 故通过 lineage 的 task_id 关联 ods_generic（同任务下写入的记录都属于该 block）。
+ */
+export function drillDWS(blockId: string): {
+  blockId: string;
+  lineage: Array<{ id: number; taskId: string; sourceTable: string | null; sinkTable: string; layer: string | null; sceneId: string | null }>;
+  dwdDetails: Array<{ detailId: number; stream: string; taskId: string; runId: string; ingestedAt: string }>;
+} {
+  const lineageRows = queryAll<{ id: number; task_id: string; source_table: string | null; sink_table: string; layer: string | null; scene_id: string | null }>(
+    "SELECT id, task_id, source_table, sink_table, layer, scene_id FROM data_lineage WHERE sink_table = ? LIMIT 50",
+    [blockId],
+  );
+  const lineage = lineageRows.map((r) => ({
+    id: r.id,
+    taskId: r.task_id,
+    sourceTable: r.source_table,
+    sinkTable: r.sink_table,
+    layer: r.layer,
+    sceneId: r.scene_id,
+  }));
+  // 通过 task_id 关联 ods_generic（同任务写入的记录属于该 block）
+  const dwdRows = queryAll<{ id: number; stream: string; task_id: string; run_id: string; ingested_at: string }>(
+    "SELECT id, stream, task_id, run_id, ingested_at FROM ods_generic WHERE task_id IN (SELECT DISTINCT task_id FROM data_lineage WHERE sink_table = ?) ORDER BY id DESC LIMIT 100",
+    [blockId],
+  );
+  const dwdDetails = dwdRows.map((r) => ({
+    detailId: r.id,
+    stream: r.stream,
+    taskId: r.task_id,
+    runId: r.run_id,
+    ingestedAt: r.ingested_at,
+  }));
+  return { blockId, lineage, dwdDetails };
+}
+
+/** 3. DWD → ODS：给定 detailId (=ods_generic.id)，返回原始单据信息 */
+export function drillDWD(detailId: number): {
+  detailId: number;
+  stream: string;
+  taskId: string;
+  runId: string;
+  ingestedAt: string;
+  odsDocs: Array<{ docId: number; record: Record<string, unknown> }>;
+} | null {
+  const row = queryOne<{ id: number; stream: string; task_id: string; run_id: string; ingested_at: string; record_json: string }>(
+    "SELECT id, stream, task_id, run_id, ingested_at, record_json FROM ods_generic WHERE id = ?",
+    [detailId],
+  );
+  if (!row) return null;
+  const record = parseRecord(row.record_json);
+  return {
+    detailId: row.id,
+    stream: row.stream,
+    taskId: row.task_id,
+    runId: row.run_id,
+    ingestedAt: row.ingested_at,
+    odsDocs: [{ docId: row.id, record }],
+  };
+}
+
+/** 4. ODS：给定 docId (=ods_generic.id)，返回解析后的原始单据 */
+export function drillODS(docId: number): {
+  docId: number;
+  stream: string;
+  taskId: string;
+  runId: string;
+  ingestedAt: string;
+  record: Record<string, unknown>;
+} | null {
+  const row = queryOne<{ id: number; stream: string; task_id: string; run_id: string; ingested_at: string; record_json: string }>(
+    "SELECT id, stream, task_id, run_id, ingested_at, record_json FROM ods_generic WHERE id = ?",
+    [docId],
+  );
+  if (!row) return null;
+  const record = parseRecord(row.record_json);
+  return {
+    docId: row.id,
+    stream: row.stream,
+    taskId: row.task_id,
+    runId: row.run_id,
+    ingestedAt: row.ingested_at,
+    record,
+  };
+}
+
+/** 5. 血缘图谱：给定 sceneId，返回 {nodes, edges} 供前端图谱渲染 */
+export function getLineageGraph(sceneId: string): {
+  nodes: Array<{ id: string; label: string; type: string; meta?: string }>;
+  edges: Array<{ source: string; target: string; label?: string; weight?: number }>;
+} {
+  const nodes: Array<{ id: string; label: string; type: string; meta?: string }> = [];
+  const edges: Array<{ source: string; target: string; label?: string; weight?: number }> = [];
+
+  // ADS 节点：场景下模型的指标
+  const indicators = queryAll<{ id: string; name: string; model_id: string }>(
+    "SELECT mi.id, mi.name, mi.model_id FROM model_indicators mi JOIN regulatory_models rm ON mi.model_id = rm.id WHERE rm.scene_id = ?",
+    [sceneId],
+  );
+  for (const ind of indicators) {
+    nodes.push({ id: `ads:${ind.id}`, label: ind.name, type: "ads" });
+  }
+
+  // DWS 节点：场景下 data_lineage 的 distinct sink_table
+  const sinkTables = queryAll<{ sink_table: string }>(
+    "SELECT DISTINCT sink_table FROM data_lineage WHERE scene_id = ?",
+    [sceneId],
+  );
+  for (const s of sinkTables) {
+    nodes.push({ id: `dws:${s.sink_table}`, label: s.sink_table, type: "dws" });
+  }
+
+  // DWD 节点：通过 task_id 关联场景下 sink_table 的 ods_generic 行（limit 50）
+  // （ods_generic.stream 与 sink_table 不一定相等，故用 task_id 关联）
+  const dwdRows = queryAll<{ id: number; stream: string; task_id: string }>(
+    "SELECT id, stream, task_id FROM ods_generic WHERE task_id IN (SELECT DISTINCT task_id FROM data_lineage WHERE scene_id = ?) ORDER BY id DESC LIMIT 50",
+    [sceneId],
+  );
+  for (const d of dwdRows) {
+    nodes.push({ id: `dwd:${d.id}`, label: `${d.stream}#${d.id}`, type: "dwd" });
+  }
+
+  // 边：每个 ADS 指标 → 每个 DWS block，label 'aggregates'
+  for (const ind of indicators) {
+    for (const s of sinkTables) {
+      edges.push({ source: `ads:${ind.id}`, target: `dws:${s.sink_table}`, label: "aggregates" });
+    }
+  }
+  // 边：每个 DWD 节点 ← 其所属 DWS block（通过 task_id 找到对应 sink_table），label 'contains'
+  // 建立 task_id → sink_table 映射，用于 DWD → DWS 边
+  const taskToSink = new Map<string, string>();
+  const lineageForEdges = queryAll<{ task_id: string; sink_table: string }>(
+    "SELECT task_id, sink_table FROM data_lineage WHERE scene_id = ?",
+    [sceneId],
+  );
+  for (const l of lineageForEdges) {
+    if (!taskToSink.has(l.task_id)) {
+      taskToSink.set(l.task_id, l.sink_table);
+    }
+  }
+  for (const d of dwdRows) {
+    const sink = taskToSink.get(d.task_id);
+    if (sink) {
+      edges.push({ source: `dws:${sink}`, target: `dwd:${d.id}`, label: "contains" });
+    }
+  }
+
+  return { nodes, edges };
+}
+
 /** 检索命中卡片 */
 interface SearchHit {
   id: string;
@@ -154,8 +365,8 @@ export const registerPenetration: FastifyPluginCallback = (app: FastifyInstance,
         const tree = buildPenetrationTree();
         if (!tree) {
           reply.code(503).send({
-            error: "no_organizations",
-            message: "组织数据未初始化，无法构建穿透树",
+            error: "service_unavailable",
+            message: "组织数据尚未初始化，无法构建穿透树",
             statusCode: 503,
           });
           return;
@@ -221,6 +432,98 @@ export const registerPenetration: FastifyPluginCallback = (app: FastifyInstance,
         }
       }
       reply.send(hits);
+    },
+  );
+
+  // ===================== 四级穿透下钻路由（V2 Task 17） =====================
+
+  // GET /penetration/ads/:indicatorId — ADS → DWS 下钻
+  app.get(
+    "/penetration/ads/:indicatorId",
+    { preHandler: [app.authenticate] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { indicatorId } = request.params as { indicatorId: string };
+      const result = drillADS(indicatorId);
+      if (!result.indicator) {
+        reply.code(404).send({ error: "not_found", message: "指标不存在", statusCode: 404 });
+        return;
+      }
+      reply.send(result);
+    },
+  );
+
+  // GET /penetration/dws/:blockId — DWS → DWD 下钻（blockId = sink_table，可含连字符）
+  app.get(
+    "/penetration/dws/:blockId",
+    { preHandler: [app.authenticate] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { blockId } = request.params as { blockId: string };
+      const result = drillDWS(blockId);
+      if (result.lineage.length === 0 && result.dwdDetails.length === 0) {
+        reply.code(404).send({ error: "not_found", message: "DWS block 不存在", statusCode: 404 });
+        return;
+      }
+      reply.send(result);
+    },
+  );
+
+  // GET /penetration/dwd/:detailId — DWD → ODS 下钻（detailId = ods_generic.id）
+  app.get(
+    "/penetration/dwd/:detailId",
+    { preHandler: [app.authenticate] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { detailId } = request.params as { detailId: string };
+      const id = Number(detailId);
+      if (!Number.isFinite(id) || !Number.isInteger(id)) {
+        reply.code(400).send({ error: "bad_request", message: "detailId 必须为整数", statusCode: 400 });
+        return;
+      }
+      const result = drillDWD(id);
+      if (!result) {
+        reply.code(404).send({ error: "not_found", message: "DWD detail 不存在", statusCode: 404 });
+        return;
+      }
+      reply.send(result);
+    },
+  );
+
+  // GET /penetration/ods/:docId — ODS 原始单据（docId = ods_generic.id）
+  app.get(
+    "/penetration/ods/:docId",
+    { preHandler: [app.authenticate] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { docId } = request.params as { docId: string };
+      const id = Number(docId);
+      if (!Number.isFinite(id) || !Number.isInteger(id)) {
+        reply.code(400).send({ error: "bad_request", message: "docId 必须为整数", statusCode: 400 });
+        return;
+      }
+      const result = drillODS(id);
+      if (!result) {
+        reply.code(404).send({ error: "not_found", message: "ODS 单据不存在", statusCode: 404 });
+        return;
+      }
+      reply.send(result);
+    },
+  );
+
+  // GET /penetration/lineage?sceneId= — 场景血缘图谱
+  app.get(
+    "/penetration/lineage",
+    { preHandler: [app.authenticate] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const q = request.query as { sceneId?: string };
+      const sceneId = (q.sceneId ?? "").trim();
+      if (!sceneId) {
+        reply.code(400).send({ error: "bad_request", message: "缺少 sceneId 参数", statusCode: 400 });
+        return;
+      }
+      const result = getLineageGraph(sceneId);
+      if (result.nodes.length === 0) {
+        reply.code(404).send({ error: "not_found", message: "场景下无血缘节点", statusCode: 404 });
+        return;
+      }
+      reply.send(result);
     },
   );
 

@@ -289,6 +289,20 @@ const TEMPLATES = [
   },
 ];
 
+/** 10 条联查规则（资金管理 5 + 投资管理 3 + 合同 2；复用现有 finance-risk 场景） */
+const LINKAGE_RULES = [
+  { id: "LR-FIN-DUP-PAY-001", scene_id: "sc-fin-dup-pay", source_system: "treasury-sys", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-FIN-PRIVATE-PAY-001", scene_id: "sc-fin-private-pay", source_system: "treasury-sys", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-FIN-FAKE-TRADE-001", scene_id: "sc-fin-fake-trade", source_system: "treasury-sys", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-FIN-GUARANTEE-001", scene_id: "sc-fin-guarantee", source_system: "treasury-sys", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-FIN-FUNDING-DUE-001", scene_id: "sc-fin-funding-due", source_system: "treasury-sys", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-INV-OVERDEBT-001", scene_id: "sc-fin-fake-trade", source_system: "kingdee-eas-openapi", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-INV-IRRELEVANT-001", scene_id: "sc-fin-guarantee", source_system: "kingdee-eas-openapi", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-INV-LOSS-001", scene_id: "sc-fin-funding-due", source_system: "kingdee-eas-openapi", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-CON-BID-DUP-001", scene_id: "sc-fin-dup-pay", source_system: "file-csv", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+  { id: "LR-CON-YINYANG-001", scene_id: "sc-fin-private-pay", source_system: "file-csv", entry_point: "indicator", drill_path: ["ads", "dws", "dwd", "ods"], target_layer: "ods" },
+];
+
 /** 灌入监管种子数据（幂等） */
 export function seedRegulatory(): void {
   transaction(() => {
@@ -339,9 +353,16 @@ export function seedRegulatory(): void {
         ],
       );
     }
+    for (const r of LINKAGE_RULES) {
+      execute(
+        `INSERT OR IGNORE INTO linkage_rules (id, scene_id, source_system, entry_point, drill_path, target_layer)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [r.id, r.scene_id, r.source_system, r.entry_point, JSON.stringify(r.drill_path), r.target_layer],
+      );
+    }
   });
   logger.info(
-    { scenes: SCENES.length, models: MODELS.length, indicators: INDICATORS.length, templates: TEMPLATES.length },
+    { scenes: SCENES.length, models: MODELS.length, indicators: INDICATORS.length, templates: TEMPLATES.length, linkageRules: LINKAGE_RULES.length },
     "监管种子数据灌入完成",
   );
 }

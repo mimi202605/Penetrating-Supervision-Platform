@@ -1,23 +1,23 @@
-# 集团穿透式监管平台
+# 中央企业穿透式监管平台
 
 > 一平台三中心 · 集团穿透式监管的工程化落地
-> 对齐方案：`大型央企集团穿透式监管平台（一平台三中心）5年落地实操方案.md`
 > 演示站点：<https://mimi202605.github.io/Penetrating-Supervision-Platform/>
 
 ---
+<img width="250" height="55" alt="image" src="https://github.com/user-attachments/assets/b1e3266b-156d-4822-b8db-c5c89ea215d8" />
 
 ## 一、平台项目概况
 
 ### 1.1 建设目标
 
-依据《大型央企集团穿透式监管平台（一平台三中心）5 年落地实操方案》，构建一套**可运行、可对接、可演进**的集团级穿透式监管平台，覆盖集团 → 板块 → 二级 → 三级 → 账户/凭证/流水的全链路穿透监管能力，实现"看得见、穿得透、调得动、管得住"。
+依据国资委最新要求，构建一套**可运行、可对接、可演进**的XXJH集团级穿透式监管平台，覆盖集团 → 板块 → 二级 → 五级 → 账户/凭证/流水的全链路穿透监管能力，实现"看得见、穿得透、调得动、管得住"。
 
 ### 1.2 总体架构 —— 一平台三中心 + 统一技术中台
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  前端层  React 18 + TS + Vite + Zustand + Recharts + Tailwind │
-│         (HashRouter, 17 个页面, 暗/亮双主题, 多端适配)         │
+│      (HashRouter, 31 个页面[前台17+后台14], 暗/亮双主题)       │
 └──────────────────────────┬──────────────────────────────────┘
                            │ fetch /api/v1  (vite proxy → 7077)
 ┌──────────────────────────▼──────────────────────────────────┐
@@ -33,11 +33,15 @@
 │  │ (全量/增量/CDC│ │ 关系图谱 BFS  │ │  review→archive)      │  │
 │  │  三模式)      │ │ 穿透查询树    │ │ 自动派单 · 指挥大屏    │  │
 │  │ 数据质量校验  │ │ 监管态势聚合  │ │ 超时检查              │  │
+│  │ V2 连接器目录 │ │ V2 监管场景   │ │ V2 风险闭环 7 态      │  │
+│  │ (20 类连接器) │ │ (5 finance)   │ │ detect→dispatch→...   │  │
+│  │ 13 类 Transform│ │ 10 条联查规则 │ │  →approve→close→archive│  │
 │  └──────────────┘ └──────────────┘ └──────────────────────┘  │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │  AI 能力 / 数据脱敏  可插拔 LLM · 字段级脱敏管道         │ │
 │  │                      自然语言查询 · 合同审查 · 报告生成   │ │
 │  │                      AI 调用全链路审计 (ai_call_logs)     │ │
+│  │  V2 智能体注册表 16 类（3 已实现：抽取/比对/报告生成）    │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │  SQLite 数仓  ODS / DWD / DWS / ADS 分层 (Doris 等价)    │ │
@@ -69,9 +73,17 @@
 ### 1.4 核心特性
 
 - **三中心业务闭环**：数据采集 → 规则推理 → 风险预警 → 自动派单 → 工单流转 → 归档回写，全链路打通
+- **V2 多协议采集底座（collection-system-v2 已落地）**：
+  - **连接器目录 20 类**：6 类已实现（kingdee-eas-openapi / sap-odata / jdbc-mysql / cdc-mysql / treasury-sys / file-csv）+ 14 类占位，统一 `capabilities` 元数据
+  - **13 类 Transform 管道**：field-mapping / type-cast / clean / dedup / filter / mask / flatten / enrich / script / sql / entity-resolve / relationship-extract / evidence-snapshot，支持配置 schema 渲染 + 预览
+  - **5 类 finance-risk 监管场景**：dup-pay / private-pay / fake-trade / guarantee / funding-due，配 5 个监管模型 + 16 个指标 + 5 个采集任务模板
+  - **10 条联查规则**：资金管理 5 + 投资管理 3 + 合同 2，按场景触发 ads→dws→dwd→ods 四级穿透
+  - **风险闭环 7 态工作流**：detect → dispatch → receive → dispose → approve → close → archive，工单 + 处置单 + 待办联动
+  - **AI 智能体注册表 16 类（3 已实现）**：info-extract / text-compare / report-generate 可经 `/ai/agents/:id/invoke` 调用，支持单智能体调用与多智能体编排
 - **AI 可选可插拔**：未配置 `AI_API_BASE` 返回结构化占位响应，配置后对接 OpenAI 兼容端点（集团微调 Llama3 / 国产大模型）
 - **数据脱敏强约束**：业务数据传入 LLM 前 MUST 经 `sanitizeForAI(payload, policy)` 字段级脱敏，原始敏感数据零外送，脱敏事件落审计
-- **前后台完整衔接**：默认走真实后端，`VITE_USE_MOCK=true` 一键回退 Mock 独立运行
+- **后台管理中心（已落地）**：独立 AdminLayout 布局，4 大模块 14 页（运营监控 / 系统管理 / 数据采集运维 / 监管配置），RequireAdmin 路由守卫，3 角色 Mock 鉴权（admin / 核查员 / 处置员），驾驶舱 KPI + 告警确认 / 静默 + 用户 CRUD + 角色权限矩阵 + 脱敏规则配置
+- **前后台完整衔接**：默认走真实后端，`VITE_USE_MOCK=true` 一键回退 Mock 独立运行（GitHub Pages 演示站点即 Mock 模式，已同步 V2 mock 数据）
 - **零外部进程依赖**：无需 Redis / MySQL / Doris / NebulaGraph / LLM 服务等独立进程，全部进程内 / SQLite 承载
 - **信创兼容**：Node.js + SQLite + 纯 JS 规则引擎天然跨平台，可在麒麟 / 统信运行
 
@@ -81,9 +93,9 @@
 /workspace
 ├── src/                         # 前端工程（React 18 + TS + Vite）
 │   ├── api/                     #   API 封装层（fetch /api/v1，含 Mock 回退）
-│   ├── pages/                   #   17 个业务页面
-│   ├── components/              #   layout / ui / charts / overview 组件
-│   ├── store/                   #   zustand 状态：主题、布局
+│   ├── pages/                   #   31 个业务页面（前台 17 + admin/ 14）
+│   ├── components/              #   layout / ui / charts / overview / admin 组件
+│   ├── store/                   #   zustand 状态：主题、布局、鉴权、后台
 │   └── mock/                    #   Mock 数据（回退与单测夹具）
 ├── server/                      # 后端工程（Fastify + TS）
 │   ├── src/
@@ -249,27 +261,48 @@ bash server/scripts/closed-loop.sh
 
 登录后 token 存 `localStorage('supervision_token')`，受保护接口需携带 `Authorization: Bearer <token>`。
 
-### 3.3 页面导览（17 个页面）
+### 3.3 页面导览（31 个页面：前台 17 + 后台 14）
+
+**前台页面（17 个）**
 
 | 路由 | 页面 | 说明 |
 |------|------|------|
 | `/` | 监管总览 | KPI / 三中心 / 十大领域 / 穿透框架 / 风险目录 / 保障 / 趋势图 |
-| `/collection/overview` | 采集中心-概览 | 数据源、采集任务、吞吐量、质量校验 |
-| `/collection/sources` | 数据源管理 | 浪潮 iGIX / 司库 MySQL / Oracle 等数据源 CRUD |
-| `/collection/tasks` | 采集任务 | 全量 / 增量 / CDC 三模式任务编排 |
-| `/monitoring/penetration` | 穿透查询 | 集团→板块→二级→三级→账户逐级下钻 |
-| `/monitoring/risk-warnings` | 风险预警 | 按领域 / 等级 / 状态筛选，状态变更 |
+| `/collection/overview` | 采集中心-概览 | 数据源、采集任务、吞吐量、质量校验；V2 连接器统计（6 已实现 / 14 占位）+ 5 类监管场景覆盖 |
+| `/collection/sources` | 数据源管理 | 浪潮 iGIX / 司库 MySQL / Oracle 等数据源 CRUD；V2 连接器目录驱动的新建表单 + 健康历史 + Schema 发现 |
+| `/collection/tasks` | 采集任务 | 全量 / 增量 / CDC 三模式任务编排；V2 13 类 Transform 配置 + 预览 + 运行审计 + 脏数据回查 |
+| `/monitoring/penetration` | 穿透查询 | 集团→板块→二级→三级→账户逐级下钻；V2 ads→dws→dwd→ods 四级数仓穿透 + 血缘图 |
+| `/monitoring/risk-warnings` | 风险预警 | 按领域 / 等级 / 状态筛选，状态变更；V2 监管场景驱动的指标命中 |
 | `/monitoring/graph` | 关系图谱 | 账户-对手-组织-人员四级 BFS 二度关联 |
-| `/monitoring/rules` | 规则配置 | 规则 CRUD + 在线推理命中 |
+| `/monitoring/rules` | 规则配置 | 规则 CRUD + 在线推理命中；V2 10 条联查规则 + 5 类监管场景配置 |
 | `/dispatch/work-orders` | 核查工单 | verify→rectify→review→archive 节点流转 |
-| `/dispatch/process` | 处置流程 | 工单全流程视图 |
+| `/dispatch/process` | 处置流程 | 工单全流程视图；V2 风险闭环 7 态（detect→dispatch→receive→dispose→approve→close→archive）+ 待办 |
 | `/dispatch/dashboard` | 指挥大屏 | KPI / 热力图 / 待办统计 |
-| `/scenarios/finance` | 财务资金监管 | 大额资金流向、账户异常 |
-| `/scenarios/investment` | 投资决策监管 | 投资合规审查 |
-| `/scenarios/compliance` | 合规风控监管 | 合同 / 关联交易 |
+| `/scenarios/finance` | 财务资金监管 | 大额资金流向、账户异常；V2 5 类 finance-risk 场景实例化（重复支付 / 对私支付 / 融资性贸易 / 超股比担保 / 融资到期） |
+| `/scenarios/investment` | 投资决策监管 | 投资合规审查；V2 3 条投资联查规则 |
+| `/scenarios/compliance` | 合规风控监管 | 合同 / 关联交易；V2 2 条合同联查规则 + AI 文本比对（阴阳合同 / 标书查重） |
 | `/scenarios/safety` | 安全生产监管 | 安全事件穿透 |
-| `/system/audit` | 审计日志 | 查询 / 处置 / 登录 / 脱敏 / AI 调用全留痕 |
+| `/system/audit` | 审计日志 | 查询 / 处置 / 登录 / 脱敏 / AI 调用全留痕；V2 AI 智能体调用全链路审计 |
 | `/system/settings` | 系统设置 | 系统配置（需 admin） |
+
+**后台管理中心页面（14 个，独立 AdminLayout，RequireAdmin 守卫）**
+
+| 路由 | 页面 | 说明 |
+|------|------|------|
+| `/admin/login` | 后台登录 | 3 角色卡片式登录（admin / 核查员 / 处置员），Mock 模式演示 RBAC 拦截 |
+| `/admin/cockpit` | 驾驶舱 | 采集吞吐 / 规则命中 / 工单 SLA / AI 调用 KPI + 7 日趋势 + 模块健康度 + 告警摘要 |
+| `/admin/alerts` | 告警中心 | 全平台告警汇总，按严重度/状态多维筛选，支持确认与静默 |
+| `/admin/users` | 用户管理 | 用户账号 CRUD、角色分配、启停，支持关键字搜索与角色筛选 |
+| `/admin/roles` | 角色权限 | 3 角色权限矩阵预览与编辑（模块×操作），admin 内置不可改 |
+| `/admin/audit-logs` | 操作审计 | 全平台操作日志查询与导出（CSV），按动作/用户筛选 |
+| `/admin/connectors` | 连接器目录 | 20 类连接器清单（6 已实现 / 14 占位），capabilities 元数据 |
+| `/admin/sources-ops` | 数据源运维 | 数据源健康监控，延迟趋势图，在线/降级/异常状态 |
+| `/admin/task-scheduler` | 任务调度 | 采集任务列表、触发、运行历史 / Checkpoint / 脏数据 / 审计点详情 |
+| `/admin/transforms` | Transform 管道 | 13 类 Transform 类型选择、步骤编排、管道预览 |
+| `/admin/scenes` | 监管场景 | 5 类 finance-risk 场景卡片，启停切换，关联规则查看 |
+| `/admin/rules-models` | 规则与模型 | 10 条联查规则列表 + 5 个监管模型，在线联查测试 |
+| `/admin/ai-agents` | AI 智能体 | 16 类智能体注册表（3 已实现），分类筛选，调用测试 |
+| `/admin/masking` | 脱敏策略 | 脱敏规则卡片墙（hash/mask/replace/encrypt），新建/编辑/启停，事件审计表 |
 
 ### 3.4 关键 API 速查（统一前缀 `/api/v1`）
 
@@ -302,6 +335,20 @@ curl -X POST http://localhost:7077/api/v1/ai/query \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "查看XXXX 2026 年三季度大额资金流向"}'
+
+# 6. 后台管理中心 API（Mock 模式直接返回预设数据）
+#    用户管理
+curl http://localhost:7077/api/v1/admin/users
+curl -X POST http://localhost:7077/api/v1/admin/users -H "Content-Type: application/json" -d '{"username":"newuser","name":"新用户","role":"核查员"}'
+#    角色权限矩阵
+curl http://localhost:7077/api/v1/admin/roles
+#    告警确认 / 静默
+curl -X POST http://localhost:7077/api/v1/admin/alerts/AL-001/confirm -H "Content-Type: application/json" -d '{"confirmBy":"管理员"}'
+#    驾驶舱 KPI
+curl http://localhost:7077/api/v1/admin/cockpit/kpi
+#    脱敏规则 CRUD
+curl http://localhost:7077/api/v1/admin/masking/rules
+curl -X POST http://localhost:7077/api/v1/admin/masking/rules -H "Content-Type: application/json" -d '{"name":"手机号脱敏","field":"phone","algorithm":"mask","pattern":"保留前3后4"}'
 ```
 
 完整端点列表见 [.trae/documents/技术架构.md §4](file:///workspace/.trae/documents/技术架构.md)。
@@ -373,6 +420,8 @@ curl -X POST http://localhost:7077/api/v1/ai/query \
 | 阶段 2 智慧监督 | 已落地 | ✅ 规则引擎 / 图谱 / 穿透 | 规则库扩展 / 图谱可视化增强 |
 | 阶段 3 调度指挥 | 已落地 | ✅ 工单状态机 / 自动派单 / 大屏 | 流程引擎替换 Flowable / 移动处置 |
 | 阶段 4 AI 全域 | 端口已落地 | ✅ 脱敏链路 / LLM 适配器 / 全链路审计 | 真实 LLM 对接 / NL2SQL / 报告生成 |
+| **collection-system-v2** | **已落地** | ✅ 20 类连接器 / 13 类 Transform / 5 监管场景 / 10 联查规则 / 16 AI 智能体 / 7 态风险闭环 / 四级穿透 | 真实 Kingdee EAS / SAP / 司库对接；剩余 13 类智能体实现 |
+| **后台管理中心** | **已落地** | ✅ AdminLayout 独立布局 / RequireAdmin 守卫 / 4 模块 14 页 / 3 角色 Mock 鉴权 / 驾驶舱 KPI + 告警 + 用户 CRUD + 权限矩阵 + 脱敏规则 | 真实 JWT 对接 / 权限矩阵落库 / 告警对接监控系统 |
 | 阶段 5 资产运营 | 规划中 | 🔜 | 分布式组件替换 / 信创适配 / 等保三级 |
 
 ---

@@ -1,0 +1,139 @@
+<h2>后台管理布局结构</h2>
+<p class="subtitle">借鉴 TailAdmin React 模式 · 同 SPA /admin/* 路由区 · 复用现有技术栈</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">AdminLayout 布局</div>
+    <div class="mockup-body" style="padding:0">
+      <div class="mock-nav" style="background:#1e293b;color:#cbd5e1;padding:8px 12px;font-size:12px">
+        <span style="color:#38bdf8">●</span> 监管平台 <span style="float:right">admin · <span style="color:#fbbf24">管理员</span> ▾ · 🌓 · ⌘K</span>
+      </div>
+      <div style="display:flex;min-height:340px">
+        <div class="mock-sidebar" style="background:#0f172a;color:#94a3b8;width:180px;padding:12px 8px;font-size:12px;line-height:2.2">
+          <div class="label" style="color:#64748b;margin-bottom:4px">系统管理</div>
+          <div style="color:#e2e8f0">👤 用户管理</div>
+          <div style="color:#94a3b8">🔑 角色权限</div>
+          <div style="color:#94a3b8">📋 操作日志</div>
+          <div class="label" style="color:#64748b;margin:8px 0 4px">数据采集运维</div>
+          <div style="color:#94a3b8">🔌 连接器目录</div>
+          <div style="color:#94a3b8">📡 数据源运维</div>
+          <div style="color:#94a3b8">⏱️ 任务调度监控</div>
+          <div style="color:#94a3b8">🔧 Transform 管道</div>
+          <div class="label" style="color:#64748b;margin:8px 0 4px">监管配置</div>
+          <div style="color:#94a3b8">🎯 监管场景</div>
+          <div style="color:#94a3b8">📐 规则与模型</div>
+          <div style="color:#94a3b8">🤖 AI 智能体</div>
+          <div style="color:#94a3b8">🛡️ 脱敏策略</div>
+          <div class="label" style="color:#64748b;margin:8px 0 4px">运营监控</div>
+          <div style="color:#94a3b8">📊 全局驾驶舱</div>
+          <div style="color:#94a3b8">🚨 实时告警墙</div>
+          <hr style="border-color:#334155;margin:10px 0">
+          <div style="color:#64748b">← 返回前台</div>
+        </div>
+        <div class="mock-content" style="flex:1;padding:16px;font-size:12px;background:#f8fafc">
+          <div style="color:#64748b;font-size:11px">系统管理 / 用户管理</div>
+          <h3 style="margin:4px 0 12px;font-size:15px">用户管理</h3>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <div class="placeholder" style="flex:1;padding:10px;border-radius:6px;background:#fff;border:1px solid #e2e8f0">🔍 搜索用户 / 角色 / 部门...</div>
+            <button class="mock-button" style="background:#2563eb;color:#fff;border:none;padding:8px 14px;border-radius:6px">+ 新建用户</button>
+          </div>
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;background:#f1f5f9;padding:8px;font-weight:600;color:#475569">
+              <div>用户</div><div>角色</div><div>部门</div><div>状态</div><div>操作</div>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:8px;border-top:1px solid #e2e8f0;color:#334155">
+              <div>李建国</div><div><span style="color:#2563eb">管理员</span></div><div>主管</div><div><span style="color:#16a34a">● 在线</span></div><div style="color:#2563eb">编辑</div>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:8px;border-top:1px solid #e2e8f0;color:#334155">
+              <div>王志远</div><div><span style="color:#0891b2">核查员</span></div><div>投资</div><div><span style="color:#16a34a">● 在线</span></div><div style="color:#2563eb">编辑</div>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:8px;border-top:1px solid #e2e8f0;color:#334155">
+              <div>周涛</div><div><span style="color:#7c3aed">处置员</span></div><div>重工</div><div><span style="color:#94a3b8">○ 离线</span></div><div style="color:#2563eb">编辑</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">运营监控驾驶舱 /admin/cockpit</div>
+    <div class="mockup-body" style="padding:12px;background:#f8fafc;font-size:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px">
+          <div style="color:#64748b;font-size:10px">采集吞吐量</div>
+          <div style="font-size:20px;font-weight:700;color:#0f172a">1.2M <span style="color:#16a34a;font-size:11px">↑12%</span></div>
+          <div style="height:24px;background:linear-gradient(90deg,#dbeafe,#3b82f6);border-radius:3px;margin-top:4px"></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px">
+          <div style="color:#64748b;font-size:10px">规则命中率</div>
+          <div style="font-size:20px;font-weight:700;color:#0f172a">68% <span style="color:#dc2626;font-size:11px">↓3%</span></div>
+          <div style="height:24px;background:linear-gradient(90deg,#fef3c7,#f59e0b);border-radius:3px;margin-top:4px"></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px">
+          <div style="color:#64748b;font-size:10px">工单平均处置时效</div>
+          <div style="font-size:20px;font-weight:700;color:#0f172a">4.2h <span style="color:#16a34a;font-size:11px">↓0.5h</span></div>
+          <div style="height:24px;background:linear-gradient(90deg,#dcfce7,#22c55e);border-radius:3px;margin-top:4px"></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px">
+          <div style="color:#64748b;font-size:10px">AI 调用量 (今日)</div>
+          <div style="font-size:20px;font-weight:700;color:#0f172a">328 <span style="color:#16a34a;font-size:11px">↑45</span></div>
+          <div style="height:24px;background:linear-gradient(90deg,#e9d5ff,#8b5cf6);border-radius:3px;margin-top:4px"></div>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-bottom:10px">
+        <div style="color:#475569;font-weight:600;margin-bottom:6px">模块健康度</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <span style="background:#dcfce7;color:#16a34a;padding:3px 8px;border-radius:4px;font-size:10px">● 采集中心</span>
+          <span style="background:#dcfce7;color:#16a34a;padding:3px 8px;border-radius:4px;font-size:10px">● 监督中心</span>
+          <span style="background:#fef3c7;color:#d97706;padding:3px 8px;border-radius:4px;font-size:10px">● 调度中心(降级)</span>
+          <span style="background:#dcfce7;color:#16a34a;padding:3px 8px;border-radius:4px;font-size:10px">● AI 服务</span>
+          <span style="background:#fee2e2;color:#dc2626;padding:3px 8px;border-radius:4px;font-size:10px">● 司库接口(异常)</span>
+        </div>
+      </div>
+      <div style="background:#1e293b;border-radius:6px;padding:10px;color:#e2e8f0">
+        <div style="color:#fbbf24;font-weight:600;margin-bottom:6px">🚨 实时告警墙</div>
+        <div style="font-size:10px;line-height:1.9;color:#cbd5e1">
+          <div><span style="color:#f87171">[红]</span> 司库 MySQL 连接超时 · DS-002 · 09:18</div>
+          <div><span style="color:#fbbf24">[橙]</span> 脏数据比例 0.13 超阈值 · T-001 · 09:00</div>
+          <div><span style="color:#fbbf24">[橙]</span> 融资到期线索未认领 · RC20260715-008</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem">
+  <h3>导航结构（4 大模块 · 14 个子页面）</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:13px">
+    <div>
+      <p class="label">系统管理</p>
+      <p>👤 用户管理 · 🔑 角色权限 · 📋 操作日志</p>
+      <p class="label" style="margin-top:0.5rem">数据采集运维</p>
+      <p>🔌 连接器目录 · 📡 数据源运维 · ⏱️ 任务调度监控 · 🔧 Transform 管道</p>
+    </div>
+    <div>
+      <p class="label">监管配置</p>
+      <p>🎯 监管场景 · 📐 规则与模型 · 🤖 AI 智能体 · 🛡️ 脱敏策略</p>
+      <p class="label" style="margin-top:0.5rem">运营监控</p>
+      <p>📊 全局驾驶舱 · 🚨 实时告警墙</p>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>布局与结构认可</h3>
+      <p>按此布局结构与导航继续细化设计</p>
+    </div>
+  </div>
+  <div class="option" data-choice="adjust" onclick="toggleSelect(this)">
+    <div class="letter">✎</div>
+    <div class="content">
+      <h3>需要调整</h3>
+      <p>在终端说明需要修改的地方</p>
+    </div>
+  </div>
+</div>
