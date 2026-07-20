@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import TopNav from "./TopNav";
 import SideNav from "./SideNav";
 import { useThemeStore } from "@/store/themeStore";
+import { useLayoutStore } from "@/store/layoutStore";
 
 /**
  * 三栏外壳：顶栏 + 侧栏 + 主内容区
@@ -20,14 +21,18 @@ export default function AppLayout() {
     root.classList.add(theme);
   }, [theme]);
 
-  // 移动端路由切换时关闭抽屉（通过浏览器返回会自动关闭，此处监听 hash 变化作为兜底）
+  // 移动端路由切换时关闭抽屉：HashRouter 路由变化主要触发 hashchange，
+  // 部分浏览器场景才会触发 popstate，两个事件都监听以覆盖所有情况
   useEffect(() => {
     const close = () => {
-      const evt = new CustomEvent("xjh:close-drawer");
-      window.dispatchEvent(evt);
+      useLayoutStore.getState().closeDrawer();
     };
     window.addEventListener("popstate", close);
-    return () => window.removeEventListener("popstate", close);
+    window.addEventListener("hashchange", close);
+    return () => {
+      window.removeEventListener("popstate", close);
+      window.removeEventListener("hashchange", close);
+    };
   }, []);
 
   return (

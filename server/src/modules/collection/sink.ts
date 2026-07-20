@@ -34,7 +34,7 @@ export function writeRecordsToSink(
   }
 }
 
-/** 写 ods_generic 表（事务批写，overwrite 模式先清同 stream） */
+/** 写 ods_generic 表（事务批写，overwrite 模式仅清同 stream 同 task 的旧数据，避免跨任务误删） */
 function writeOdsGeneric(
   taskId: string,
   runId: string,
@@ -44,7 +44,8 @@ function writeOdsGeneric(
 ): void {
   transaction(() => {
     if (writeMode === "overwrite") {
-      execute("DELETE FROM ods_generic WHERE stream = ?", [stream]);
+      // 仅清除当前任务的旧数据，避免误删其他任务写入同 stream 的数据
+      execute("DELETE FROM ods_generic WHERE stream = ? AND task_id = ?", [stream, taskId]);
     }
     // 批量 INSERT
     const stmt = "INSERT INTO ods_generic (task_id, run_id, stream, record_json) VALUES (?, ?, ?, ?)";

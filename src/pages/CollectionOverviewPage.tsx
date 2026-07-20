@@ -38,20 +38,30 @@ export default function CollectionOverviewPage() {
   const [scenesLoading, setScenesLoading] = useState(true);
 
   useEffect(() => {
-    api.getCollectionTasks().then((t) => {
-      setTasks(t);
-      setLoading(false);
+    api
+      .getCollectionTasks()
+      .then((t) => {
+        setTasks(t);
+      })
+      .catch((e) => {
+        console.error("getCollectionTasks failed", e);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+    api.getCollectionTrend().then(setTrend).catch((e) => {
+      console.error("getCollectionTrend failed", e);
     });
-    api.getCollectionTrend().then(setTrend);
     // 拉取连接器目录
     api
       .listConnectors()
       .then((c) => {
         setConnectors(c);
-        setConnectorsLoading(false);
       })
       .catch((e) => {
         console.error("listConnectors failed", e);
+      })
+      .finally(() => {
         setConnectorsLoading(false);
       });
     // 拉取监管场景
@@ -59,10 +69,11 @@ export default function CollectionOverviewPage() {
       .listRegulatoryScenes()
       .then((s) => {
         setScenes(s);
-        setScenesLoading(false);
       })
       .catch((e) => {
         console.error("listRegulatoryScenes failed", e);
+      })
+      .finally(() => {
         setScenesLoading(false);
       });
   }, []);
@@ -147,7 +158,7 @@ export default function CollectionOverviewPage() {
           <Stat
             icon={<CheckCircle2 size={16} strokeWidth={1.5} />}
             label="成功任务"
-            value={successCount || 6}
+            value={successCount}
             countUp
             decimals={0}
             trend={{ text: `${runningCount} 运行中`, tone: "info" }}

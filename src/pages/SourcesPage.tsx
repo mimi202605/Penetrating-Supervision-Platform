@@ -222,32 +222,33 @@ export default function SourcesPage() {
   };
 
   // 新建提交
-  const onSubmitCreate = () => {
+  const onSubmitCreate = async () => {
+    if (submitting) return;
     if (!createForm.name.trim() || !createForm.connectorType) {
       showToast("请填写名称并选择连接器类型", "warning");
       return;
     }
     setSubmitting(true);
-    api
-      .createSource({
+    try {
+      const newSource = await api.createDataSource({
         name: createForm.name.trim(),
         connectorType: createForm.connectorType,
+        type: createForm.connectorType,
         endpoint: createForm.endpoint || undefined,
-        username: createForm.username || undefined,
-        password: createForm.password || undefined,
         owner: createForm.username || undefined,
-      })
-      .then((newSource) => {
-        setSources((prev) => [newSource, ...prev]);
-        setCreateOpen(false);
-        setCreateForm({ connectorType: "", name: "", endpoint: "", username: "", password: "" });
-        showToast("新建数据源已保存", "success");
-      })
-      .catch((e) => {
-        console.error("createSource failed", e);
-        showToast("新建数据源失败", "error");
-      })
-      .finally(() => setSubmitting(false));
+        config: createForm.endpoint
+          ? { endpoint: createForm.endpoint }
+          : undefined,
+      });
+      setSources((prev) => [newSource, ...prev]);
+      setCreateOpen(false);
+      setCreateForm({ connectorType: "", name: "", endpoint: "", username: "", password: "" });
+      showToast(`数据源已创建：${newSource.id}`, "success");
+    } catch (err) {
+      showToast(`创建失败：${(err as Error).message}`, "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const columns: Column<DataSource>[] = [

@@ -429,7 +429,7 @@ export async function runTask(taskId: string, opts: RunTaskOptions = {}): Promis
       finishRun(runId, status, result);
       execute(
         "UPDATE collection_tasks SET last_status = ? WHERE id = ?",
-        [status === "killed" ? "失败" : "失败", taskId],
+        [status === "killed" ? "超时" : "失败", taskId],
       );
     }
     eventBus.emit("collection.failed", { taskId, runId, error: errMsg });

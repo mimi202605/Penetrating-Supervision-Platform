@@ -2,7 +2,20 @@
 
 export type RiskLevel = "high" | "medium" | "low";
 export type RiskStatus = "pending" | "processing" | "resolved";
-export type WorkOrderNode = "verify" | "rectify" | "review" | "archive";
+/** 工单节点：V2 七态 + V1 别名（向后兼容，V1 通过 NODE_ALIASES 映射到 V2） */
+export type WorkOrderNode =
+  // V2 七态
+  | "detect"
+  | "dispatch"
+  | "receive"
+  | "dispose"
+  | "approve"
+  | "close"
+  | "archive"
+  // V1 别名（向后兼容）
+  | "verify"
+  | "rectify"
+  | "review";
 export type WorkOrderStatus = "processing" | "archived";
 
 export interface KpiSnapshot {
@@ -407,100 +420,4 @@ export interface OrchestrateResult {
 // 智能体调用响应（通用，按 agent 不同字段不同）
 export interface AgentInvokeResponse {
   [key: string]: unknown;
-}
-
-/* ===================== 后台管理中心增补类型（Task 1 先放最小集，Task 2 补齐） ===================== */
-export type AdminRole = "admin" | "核查员" | "处置员";
-
-/* ===================== 后台管理中心增补类型 ===================== */
-
-/** 后台用户（管理对象） */
-export interface AdminUser {
-  id: string;
-  username: string;
-  name: string;
-  role: AdminRole;
-  department: string;
-  email: string;
-  phone: string;
-  status: "active" | "disabled";
-  lastLoginAt: string;
-  createdAt: string;
-}
-
-/** 权限矩阵：模块 × 操作 */
-export interface PermissionMatrix {
-  module: string;
-  operations: { op: string; allowed: boolean }[];
-}
-
-/** 角色定义 */
-export interface AdminRoleDef {
-  id: string;
-  name: string;
-  code: AdminRole;
-  description: string;
-  permissions: PermissionMatrix[];
-  userCount: number;
-}
-
-/** 告警严重级别与状态 */
-export type AlertSeverity = "red" | "orange" | "yellow";
-export type AlertStatus = "active" | "confirmed" | "silenced";
-
-/** 后台告警 */
-export interface AdminAlert {
-  id: string;
-  title: string;
-  severity: AlertSeverity;
-  status: AlertStatus;
-  module: string;
-  detail: string;
-  triggeredAt: string;
-  confirmedBy?: string;
-}
-
-/** 驾驶舱 KPI 聚合 */
-export interface CockpitKpi {
-  collectionThroughput: { value: number; unit: string; delta: string; trend: "up" | "down" };
-  ruleHits: { value: number; delta: string; trend: "up" | "down" };
-  orderSla: { value: string; delta: string; trend: "up" | "down" };
-  aiCalls: { value: number; delta: string; trend: "up" | "down" };
-  moduleHealth: { name: string; health: number; tone: "success" | "warning" | "danger" }[];
-  /** 7 日趋势 */
-  trends: {
-    date: string;
-    collection: number;
-    ruleHits: number;
-    orders: number;
-    ai: number;
-  }[];
-  /** 告警摘要（按级别计数） */
-  alertSummary: { severity: AlertSeverity; count: number }[];
-}
-
-/** 脱敏算法 */
-export type MaskingAlgorithm = "hash" | "mask" | "replace" | "encrypt";
-
-/** 脱敏规则 */
-export interface MaskingRule {
-  id: string;
-  name: string;
-  field: string;
-  algorithm: MaskingAlgorithm;
-  pattern: string;
-  sourceId?: string;
-  sourceName?: string;
-  enabled: boolean;
-}
-
-/** 脱敏事件审计 */
-export interface MaskingEvent {
-  id: string;
-  ruleId: string;
-  ruleName: string;
-  sourceId: string;
-  field: string;
-  appliedAt: string;
-  count: number;
 }

@@ -123,6 +123,7 @@ export default function TasksPage() {
   const [stepIdx, setStepIdx] = useState(0);
   const [sources, setSources] = useState<DataSource[]>([]);
   const [transformTypes, setTransformTypes] = useState<TransformType[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const [wizard, setWizard] = useState({
     sourceId: "",
     stream: "",
@@ -402,13 +403,32 @@ export default function TasksPage() {
     setStepIdx((i) => Math.min(i + 1, WIZARD_STEPS.length - 1));
   };
   const prevStep = () => setStepIdx((i) => Math.max(i - 1, 0));
-  const submitWizard = () => {
-    // 后端 POST /collection/tasks 暂未封装，简化为 toast
-    setCreateOpen(false);
-    showToast(
-      `任务向导已提交（source=${wizard.sourceId || "-"}, transforms=${wizard.transformSteps.length}, mappings=${wizard.mappings.length}）· 新建功能后端已就绪`,
-      "success",
-    );
+  const submitWizard = async () => {
+    if (submitting) return;
+    if (!wizard.sourceId) {
+      showToast("请先选择数据源", "warning");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const source = sources.find((s) => s.id === wizard.sourceId);
+      const task = await api.createCollectionTask({
+        name: `${source?.name ?? wizard.sourceId} · 采集任务`,
+        sourceId: wizard.sourceId,
+        schedule: wizard.cron,
+        concurrency: Number(wizard.concurrency) || 1,
+        retryMax: Number(wizard.retry) || 3,
+        timeoutSec: Number(wizard.timeout) || undefined,
+        transformPipeline: wizard.transformSteps,
+      });
+      setTasks((prev) => [task, ...prev]);
+      setCreateOpen(false);
+      showToast(`任务已创建：${task.id}`, "success");
+    } catch (err) {
+      showToast(`创建失败：${(err as Error).message}`, "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -511,8 +531,8 @@ export default function TasksPage() {
                 <ChevronRight size={12} />
               </button>
             ) : (
-              <button type="button" className="ds-btn ds-btn-primary" onClick={submitWizard}>
-                提交
+              <button type="button" className="ds-btn ds-btn-primary" onClick={submitWizard} disabled={submitting}>
+                {submitting ? "提交中..." : "提交"}
               </button>
             )}
           </>

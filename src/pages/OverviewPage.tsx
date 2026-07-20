@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
-import Segmented from "@/components/ui/Segmented";
 import StatusTag from "@/components/ui/StatusTag";
 import MissionBanner from "@/components/overview/MissionBanner";
 import PenetrationBar from "@/components/overview/PenetrationBar";
@@ -31,13 +30,9 @@ import type {
 } from "@/api/types";
 import { cn } from "@/lib/utils";
 
-type TimeRange = "today" | "week" | "month";
-
 export default function OverviewPage() {
   const navigate = useNavigate();
-  const [timeRange, setTimeRange] = useState<TimeRange>("month");
   const [refreshing, setRefreshing] = useState(false);
-  const [tick, setTick] = useState(0);
 
   const [kpi, setKpi] = useState<KpiSnapshot>(mock.kpiSnapshot);
   const [centers, setCenters] = useState<CenterStatus[]>(mock.centers);
@@ -83,16 +78,27 @@ export default function OverviewPage() {
 
   // 首次加载
   useEffect(() => {
-    loadAll();
+    loadAll().catch((err) => {
+      // 静默失败时保留 mock 兜底数据，避免首屏白屏
+      // eslint-disable-next-line no-console
+      console.error("[OverviewPage] 首次加载失败，使用兜底数据", err);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onRefresh = async () => {
     if (refreshing) return;
     setRefreshing(true);
-    await loadAll();
-    setTick((t) => t + 1);
-    setTimeout(() => setRefreshing(false), 500);
+    try {
+      await loadAll();
+    } catch (err) {
+      // 刷新失败不影响已有数据展示，仅记录日志
+      // eslint-disable-next-line no-console
+      console.error("[OverviewPage] 刷新失败", err);
+    } finally {
+      // 无论成功失败都要恢复按钮状态，避免永久禁用
+      setTimeout(() => setRefreshing(false), 500);
+    }
   };
 
   const onRiskClick = (r: RiskWarning) => {
@@ -109,18 +115,6 @@ export default function OverviewPage() {
           <StatusTag tone="success" dot>
             系统运行正常
           </StatusTag>
-          <Segmented<TimeRange>
-            value={timeRange}
-            onChange={(v) => {
-              setTimeRange(v);
-              onRefresh();
-            }}
-            options={[
-              { value: "today", label: "今日" },
-              { value: "week", label: "本周" },
-              { value: "month", label: "本月" },
-            ]}
-          />
           <button
             type="button"
             onClick={onRefresh}
@@ -136,7 +130,7 @@ export default function OverviewPage() {
         </>
       }
     >
-      <div key={tick} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5">
         <MissionBanner />
         <PenetrationBar />
         <KpiGrid data={kpi} />

@@ -6,7 +6,7 @@ import Segmented from "@/components/ui/Segmented";
 import DataTable, { type Column } from "@/components/ui/DataTable";
 import MiniSteps, { WORK_ORDER_NODES } from "@/components/ui/MiniSteps";
 import Progress from "@/components/ui/Progress";
-import { api } from "@/api";
+import { api, type CreateWorkOrderRequest } from "@/api";
 import * as mock from "@/mock";
 import type { WorkOrder, WorkOrderStatus } from "@/api/types";
 
@@ -14,12 +14,47 @@ export default function WorkOrdersPage() {
   const [list, setList] = useState<WorkOrder[]>(mock.workOrders);
   const [filter, setFilter] = useState<WorkOrderStatus | "all">("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateWorkOrderRequest>({
+    riskSource: "",
+    owner: "",
+    riskWarningId: "",
+  });
+
+  const reload = () => {
+    api.getWorkOrders().then(setList).catch(() => {});
+  };
 
   useEffect(() => {
-    api.getWorkOrders().then(setList);
+    reload();
   }, []);
 
-  const filtered = filter === "all" ? list : list.filter((w) => w.status === filter);
+  const handleCreate = async () => {
+    if (!createForm.riskSource.trim()) {
+      alert("请填写关联风险源");
+      return;
+    }
+    setCreating(true);
+    try {
+      await api.createWorkOrder({
+        riskSource: createForm.riskSource.trim(),
+        owner: createForm.owner?.trim() || undefined,
+        riskWarningId: createForm.riskWarningId?.trim() || undefined,
+      });
+      setShowCreate(false);
+      setCreateForm({ riskSource: "", owner: "", riskWarningId: "" });
+      reload();
+    } catch (err) {
+      alert(`创建失败：${(err as Error).message}`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const filtered = (filter === "all" ? list : list.filter((w) => w.status === filter))
+    .filter((w) => !ownerFilter.trim() || (w.owner ?? "").toLowerCase().includes(ownerFilter.trim().toLowerCase()));
 
   const columns: Column<WorkOrder>[] = [
     {
@@ -61,15 +96,31 @@ export default function WorkOrdersPage() {
     {
       key: "action",
       title: "操作",
-      render: () => <a className="ds-action-link" onClick={(e) => e.stopPropagation()}>查看</a>,
+      render: (r) => (
+        <a
+          className="ds-action-link"
+          onClick={(e) => {
+            e.stopPropagation();
+            alert(`工单 ${r.id}\n风险来源：${r.riskSource}\n负责人：${r.owner ?? "未分配"}\n当前节点：${r.currentNode}\n进度：${r.progress}%`);
+          }}
+        >
+          查看
+        </a>
+      ),
     },
   ];
 
   const stats = {
     processing: list.filter((w) => w.status === "processing").length,
     archived: list.filter((w) => w.status === "archived").length,
-    onTime: "96%",
-    avgTime: "4.2h",
+    completionRate:
+      list.length === 0
+        ? "—"
+        : `${Math.round((list.filter((w) => w.status === "archived").length / list.length) * 100)}%`,
+    avgProgress:
+      list.length === 0
+        ? "—"
+        : `${Math.round(list.reduce((sum, w) => sum + (w.progress ?? 0), 0) / list.length)}%`,
   };
 
   return (
@@ -93,6 +144,7 @@ export default function WorkOrdersPage() {
             type="button"
             className="ds-btn ds-btn-secondary"
             aria-label="筛选"
+            onClick={() => setShowFilterPanel((v) => !v)}
           >
             <Filter size={14} />
             筛选
@@ -114,8 +166,8 @@ export default function WorkOrdersPage() {
           {[
             { label: "进行中工单", value: stats.processing, tone: "info" as const },
             { label: "已归档工单", value: stats.archived, tone: "stop" as const },
-            { label: "按时处置率", value: stats.onTime, tone: "success" as const },
-            { label: "平均处置时长", value: stats.avgTime, tone: "warning" as const },
+            { label: "完成率", value: stats.completionRate, tone: "success" as const },
+            { label: "平均进度", value: stats.avgProgress, tone: "warning" as const },
           ].map((s) => (
             <div key={s.label} className="ds-card flex flex-col gap-2">
               <span className="text-body" style={{ color: "var(--color-on-surface-variant)" }}>
@@ -127,10 +179,35 @@ export default function WorkOrdersPage() {
               >
                 {s.value}
               </span>
-              <StatusTag tone={s.tone}>实时</StatusTag>
+              <StatusTag tone={s.tone}>快照</StatusTag>
             </div>
           ))}
         </div>
+
+        {/* 筛选面板（可折叠） */}
+        {showFilterPanel ? (
+          <div className="ds-card flex flex-wrap items-center gap-3">
+            <span className="text-body" style={{ color: "var(--color-on-surface-variant)" }}>
+              按负责人筛选
+            </span>
+            <input
+              className="ds-input flex-1 min-w-[180px]"
+              placeholder="输入负责人关键字（不区分大小写）"
+              value={ownerFilter}
+              onChange={(e) => setOwnerFilter(e.target.value)}
+            />
+            {ownerFilter ? (
+              <button
+                type="button"
+                className="ds-btn ds-btn-secondary"
+                onClick={() => setOwnerFilter("")}
+              >
+                清除
+              </button>
+            ) : null}
+            <span className="ds-section-sub">命中 {filtered.length} 条</span>
+          </div>
+        ) : null}
 
         {/* 列表 */}
         <section className="ds-card">
@@ -191,6 +268,10 @@ export default function WorkOrdersPage() {
                   <input
                     className="ds-input w-full"
                     placeholder="选择风险预警编号"
+                    value={createForm.riskSource}
+                    onChange={(e) =>
+                      setCreateForm((f) => ({ ...f, riskSource: e.target.value }))
+                    }
                   />
                 </div>
                 <div>
@@ -203,6 +284,10 @@ export default function WorkOrdersPage() {
                   <input
                     className="ds-input w-full"
                     placeholder="输入核查负责人"
+                    value={createForm.owner ?? ""}
+                    onChange={(e) =>
+                      setCreateForm((f) => ({ ...f, owner: e.target.value }))
+                    }
                   />
                 </div>
                 <div>
@@ -237,10 +322,11 @@ export default function WorkOrdersPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCreate(false)}
+                  onClick={handleCreate}
+                  disabled={creating}
                   className="ds-btn ds-btn-primary"
                 >
-                  创建
+                  {creating ? "创建中..." : "创建"}
                 </button>
               </div>
             </div>
