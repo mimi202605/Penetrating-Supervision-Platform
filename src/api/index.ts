@@ -354,6 +354,15 @@ export const api = {
     useMock()
       ? delay(mock.riskHeatmap)
       : request<DashboardResponse>("/dispatch/dashboard").then((r) => r.heatmap),
+  /** 大屏聚合接口：一次拉取 kpis / heatmap / pendingStats（byNode 兼容 V1/V2） */
+  getDashboard: (): Promise<DashboardResponse> =>
+    useMock()
+      ? delay({
+          kpis: mock.bigScreenKpis,
+          heatmap: mock.riskHeatmap,
+          pendingStats: { byNode: {}, byOwner: [] },
+        } as DashboardResponse)
+      : request<DashboardResponse>("/dispatch/dashboard"),
 
   /* ============ 穿透查询 ============ */
   getPenetrationTree: (): Promise<typeof mock.penetrationTree> =>
